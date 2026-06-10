@@ -222,7 +222,7 @@ export type NativeBuildConfig = {
 
 // ─── Firebase config ─────────────────────────────────────────────────────────
 
-export type FirebasePlatform = 'android' | 'ios';
+export type FirebasePlatform = 'android' | 'ios' | 'desktop';
 
 export type FirebaseConfig = {
   id: string;
@@ -340,6 +340,27 @@ export type VariantDetectArgs = {
   platform?: MobilePlatform;  // override (used during create, before the project is saved)
   module?: string;            // gradle module override (defaults to config or "app")
 };
+
+// ─── Mobile asset detection / validation (firebase configs, keystores) ─────────
+
+export type AssetKind = 'firebase-android' | 'firebase-ios' | 'firebase-desktop' | 'keystore';
+
+export type AssetValidation = {
+  valid: boolean;
+  detail?: string;   // e.g. "project: my-app" / "JKS keystore"
+  error?: string;
+};
+
+export type DetectedMobileAssets = {
+  firebaseAndroid: string | null;   // project-relative paths
+  firebaseIos: string | null;
+  firebaseDesktop: string | null;
+  keystores: string[];
+};
+
+export type ImportAssetResult =
+  | { ok: true; relPath: string; detail?: string }
+  | { ok: false; error: string };
 
 // ─── CRUD inputs ─────────────────────────────────────────────────────────────
 
@@ -486,6 +507,9 @@ export type LauncherApi = {
   mobilePickFile: (args: { defaultPath?: string; title?: string; filters?: { name: string; extensions: string[] }[] }) => Promise<string | null>;
   mobileGetBuildRecord: (args: { projectPath: string }) => Promise<MobileBuildRecord | null>;
   mobileDetectVariants: (args: VariantDetectArgs) => Promise<DetectedVariants>;
+  mobileDetectAssets: (args: { projectPath: string; platform: MobilePlatform }) => Promise<DetectedMobileAssets>;
+  mobileValidateAsset: (args: { projectPath: string; path: string; kind: AssetKind }) => Promise<AssetValidation>;
+  mobileImportAsset: (args: { projectPath: string; srcPath: string; kind: AssetKind; platform: MobilePlatform }) => Promise<ImportAssetResult>;
 
   // Utilities
   pickDirectory: (args: { defaultPath?: string; title?: string }) => Promise<string | null>;
@@ -500,6 +524,9 @@ export type LauncherApi = {
 
   // App
   relaunch: () => Promise<void>;
+
+  /** Absolute path of a dropped/selected File (Electron 33+ replacement for File.path). */
+  getPathForFile: (file: File) => string;
 };
 
 declare global {

@@ -1,11 +1,11 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import { join } from 'node:path';
-import { registerServiceIpc } from './ipc/services';
-import { registerWorkspacesIpc } from './ipc/workspaces';
-import { registerMobileIpc } from './ipc/mobile';
-import { attachToWindow, stopAllSync } from './process-manager';
-import { attachMobileToWindow, stopAllMobileSync } from './process/mobile-process';
-import { getDb, closeDb } from './db/database';
+import { registerServiceIpc } from './app/ipc/services';
+import { registerWorkspacesIpc } from './app/ipc/workspaces';
+import { registerMobileIpc } from './app/ipc/mobile';
+import { attachToWindow, stopAllSync } from './capabilities/process/backendProcess';
+import { attachMobileToWindow, stopAllMobileSync } from './capabilities/process/mobileProcess';
+import { getDb, closeDb } from './capabilities/persistence/database';
 
 const DEV_SERVER = process.env.ELECTRON_RENDERER_URL;
 

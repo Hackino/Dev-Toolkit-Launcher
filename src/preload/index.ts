@@ -1,8 +1,10 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import type {
+  AssetKind,
   DetectedVariants,
   ExitEvent,
   FirebaseConfigInput,
+  MobilePlatform,
   KillPortResult,
   LauncherApi,
   LogEvent,
@@ -118,6 +120,12 @@ const api: LauncherApi = {
     ipcRenderer.invoke('mobile:getBuildRecord', args) as Promise<MobileBuildRecord | null>,
   mobileDetectVariants: (args: VariantDetectArgs) =>
     ipcRenderer.invoke('mobile:detectVariants', args) as Promise<DetectedVariants>,
+  mobileDetectAssets: (args: { projectPath: string; platform: MobilePlatform }) =>
+    ipcRenderer.invoke('mobile:detectAssets', args) as ReturnType<LauncherApi['mobileDetectAssets']>,
+  mobileValidateAsset: (args: { projectPath: string; path: string; kind: AssetKind }) =>
+    ipcRenderer.invoke('mobile:validateAsset', args) as ReturnType<LauncherApi['mobileValidateAsset']>,
+  mobileImportAsset: (args: { projectPath: string; srcPath: string; kind: AssetKind; platform: MobilePlatform }) =>
+    ipcRenderer.invoke('mobile:importAsset', args) as ReturnType<LauncherApi['mobileImportAsset']>,
 
   // Service control
   startService: (args: { projectPath: string; profileId?: string | null }) =>
@@ -155,6 +163,10 @@ const api: LauncherApi = {
 
   // App
   relaunch: () => ipcRenderer.invoke('app:relaunch') as Promise<void>,
+
+  // Resolve the absolute filesystem path of a dropped/selected File (Electron 33+
+  // removed File.path; webUtils.getPathForFile is the supported replacement).
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
 };
 
 contextBridge.exposeInMainWorld('launcher', api);

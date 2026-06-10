@@ -5,11 +5,11 @@ import { useWorkspaces } from './hooks/useWorkspaces';
 import { useTerminals } from './hooks/useTerminals';
 import { useDevices } from './hooks/useDevices';
 import { useMobile } from './hooks/useMobile';
-import ServiceColumn from './components/ServiceColumn';
-import MobileServiceColumn from './components/MobileServiceColumn';
-import TerminalDock from './components/TerminalDock';
-import WorkspaceTabs from './components/WorkspaceTabs';
-import WorkspaceManager from './components/WorkspaceManager';
+import ServiceColumn from './ui/ServiceColumn';
+import MobileServiceColumn from './ui/MobileServiceColumn';
+import TerminalDock from './ui/TerminalDock';
+import WorkspaceTabs from './ui/WorkspaceTabs';
+import WorkspaceManager from './app/WorkspaceManager';
 
 type BackendProjectConfig = Omit<ProjectConfig, 'type'> & { type: BackendProjectType };
 
