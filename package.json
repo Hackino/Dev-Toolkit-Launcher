@@ -2,7 +2,20 @@
   "name": "dev-launcher",
   "private": true,
   "version": "1.0.0",
-  "description": "Universal Electron desktop launcher — run any .NET, Node, Spring Boot, or Ktor service from one UI",
+  "description": "Desktop command center to run, build, and release backend, web, and mobile projects (Android, iOS, Flutter, React Native, Compose Multiplatform) from one UI",
+  "license": "MIT",
+  "keywords": [
+    "electron",
+    "developer-tools",
+    "launcher",
+    "react",
+    "typescript",
+    "mobile",
+    "flutter",
+    "android",
+    "ios",
+    "kotlin-multiplatform"
+  ],
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
