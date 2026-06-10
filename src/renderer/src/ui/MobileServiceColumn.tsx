@@ -4,13 +4,13 @@ import type {
   MobileConfig,
   MobileDevice,
   MobilePlatform,
-  KmpTarget,
   ServiceStatus,
   MobileBuildRecord,
   FirebaseConfig,
 } from '../../../shared/types';
-import { KMP_TARGET_LABELS, MOBILE_PLATFORM_LABELS } from '../../../shared/types';
+import { MOBILE_PLATFORM_LABELS } from '../../../shared/types';
 import { PlatformLogo } from '../capabilities/logos/mobileLogos';
+import type { MobileColumnTarget, ColumnTargetKind } from '../features/mobileColumnTargets';
 import StatusBadge from './StatusBadge';
 
 const IS_MACOS = navigator.platform.startsWith('Mac') || navigator.userAgent.includes('Mac');
@@ -18,6 +18,8 @@ const IS_MACOS = navigator.platform.startsWith('Mac') || navigator.userAgent.inc
 interface Props {
   index: number;
   project: ProjectConfig;
+  /** For multi-platform projects (Flutter/RN/KMP), the platform this column represents. */
+  target: MobileColumnTarget | null;
   mobileConfig: MobileConfig | null;
   firebase: FirebaseConfig[];
   devices: MobileDevice[];
@@ -64,21 +66,23 @@ function ActionButton({
 export default function MobileServiceColumn({
   index,
   project,
+  target,
   mobileConfig,
   firebase,
   devices,
   status,
   busy,
   lastBuild,
-  onEdit,
 }: Props) {
   const platform = project.type as MobilePlatform;
-  const iosBlocked = (platform === 'ios') && !IS_MACOS;
+  const kind: ColumnTargetKind = target?.kind ?? (platform === 'ios' ? 'ios' : 'android');
+  const isIos = kind === 'ios';
+  const iosBlocked = isIos && !IS_MACOS;
   const isRunning = status.status === 'running';
+  const usesDevices = kind === 'android' || kind === 'ios';
 
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
-  const [selectedKmpTarget, setSelectedKmpTarget] = useState<KmpTarget>('android');
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [taskBusy, setTaskBusy] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -93,9 +97,6 @@ export default function MobileServiceColumn({
     if (!selectedEntryId) {
       const def = mobileConfig.flutterEntryPoints.find((e) => e.isDefault) ?? mobileConfig.flutterEntryPoints[0];
       if (def) setSelectedEntryId(def.id);
-    }
-    if (mobileConfig.kmpTargets.length > 0 && !mobileConfig.kmpTargets.includes(selectedKmpTarget)) {
-      setSelectedKmpTarget(mobileConfig.kmpTargets[0]);
     }
   }, [mobileConfig]); // eslint-disable-line
 
@@ -120,22 +121,30 @@ export default function MobileServiceColumn({
     projectPath: project.path,
     configId: selectedConfigId,
     entryPointId: selectedEntryId,
-    kmpTarget: platform === 'compose-multiplatform' ? selectedKmpTarget : null,
+    kmpTarget: target?.kmpTarget ?? null,
   };
-
   const runArgs = { ...buildArgs, deviceId: selectedDeviceId ?? '' };
 
   const androidConfigs = mobileConfig?.androidBuildConfigs ?? [];
   const iosConfigs = mobileConfig?.iosBuildConfigs ?? [];
   const flutterEntries = mobileConfig?.flutterEntryPoints ?? [];
-  const kmpTargets = mobileConfig?.kmpTargets ?? [];
-  const activeDevice = devices.find((d) => d.id === selectedDeviceId) ?? null;
+  const kindDevices = devices.filter((d) => (isIos ? d.platform === 'ios' : d.platform !== 'ios'));
+  const activeDevice = kindDevices.find((d) => d.id === selectedDeviceId) ?? null;
 
   const fbAndroid = firebase.find((f) => f.platform === 'android');
   const fbIos = firebase.find((f) => f.platform === 'ios');
+  const fbDesktop = firebase.find((f) => f.platform === 'desktop');
+
+  // Action dispatch helpers
+  const doRunDevice = () => run(() => window.launcher.mobileRunOnDevice(runArgs));
+  const doRunEmu = () => run(() => window.launcher.mobileRunOnEmulator(runArgs));
+  const doBuild = () => run(() => window.launcher.mobileBuild(buildArgs));
+  const doRelease = () => run(() => window.launcher.mobileGenerateRelease(buildArgs));
+  const doClean = () => run(() => window.launcher.mobileClean({ projectPath: project.path }));
+  const primaryRun = kind === 'android' ? doRunDevice : doRunEmu;
 
   return (
-    <section className="column mobile-column" data-platform={platform}>
+    <section className="column mobile-column" data-platform={platform} data-kind={kind}>
       {/* Header */}
       <div className="column-top">
         <div className="column-logo-group">
@@ -146,6 +155,9 @@ export default function MobileServiceColumn({
             <span className="column-type-name mobile-type-name">
               {MOBILE_PLATFORM_LABELS[platform]}
             </span>
+            {target && (
+              <span className="mobile-target-badge" data-kind={kind}>{target.label}</span>
+            )}
           </div>
         </div>
         <div className="column-index" data-n={index} />
@@ -168,34 +180,6 @@ export default function MobileServiceColumn({
 
       {/* Selectors row */}
       <div className="mobile-selectors">
-        {/* Build config selector */}
-        {(platform === 'android' || platform === 'react-native' || platform === 'compose-multiplatform') && androidConfigs.length > 0 && (
-          <select
-            className="mobile-selector"
-            value={selectedConfigId ?? ''}
-            onChange={(e) => setSelectedConfigId(e.target.value || null)}
-            title="Build configuration"
-          >
-            {androidConfigs.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        )}
-
-        {platform === 'ios' && iosConfigs.length > 0 && (
-          <select
-            className="mobile-selector"
-            value={selectedConfigId ?? ''}
-            onChange={(e) => setSelectedConfigId(e.target.value || null)}
-            disabled={iosBlocked}
-            title="Build configuration"
-          >
-            {iosConfigs.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        )}
-
         {/* Flutter entry point */}
         {platform === 'flutter' && flutterEntries.length > 0 && (
           <select
@@ -210,39 +194,55 @@ export default function MobileServiceColumn({
           </select>
         )}
 
-        {/* KMP target */}
-        {platform === 'compose-multiplatform' && kmpTargets.length > 0 && (
+        {/* Android build config */}
+        {platform !== 'flutter' && kind === 'android' && androidConfigs.length > 0 && (
           <select
             className="mobile-selector"
-            value={selectedKmpTarget}
-            onChange={(e) => setSelectedKmpTarget(e.target.value as KmpTarget)}
-            title="KMP target"
+            value={selectedConfigId ?? ''}
+            onChange={(e) => setSelectedConfigId(e.target.value || null)}
+            title="Build configuration"
           >
-            {kmpTargets.map((t) => (
-              <option key={t} value={t}>{KMP_TARGET_LABELS[t]}</option>
+            {androidConfigs.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
         )}
 
-        {/* Device selector */}
-        {devices.length > 0 && (
+        {/* iOS build config */}
+        {platform !== 'flutter' && kind === 'ios' && iosConfigs.length > 0 && (
+          <select
+            className="mobile-selector"
+            value={selectedConfigId ?? ''}
+            onChange={(e) => setSelectedConfigId(e.target.value || null)}
+            disabled={iosBlocked}
+            title="Build configuration"
+          >
+            {iosConfigs.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        )}
+
+        {/* Device selector (android / ios columns only) */}
+        {usesDevices && kindDevices.length > 0 && (
           <select
             className="mobile-selector mobile-selector--device"
             value={selectedDeviceId ?? ''}
             onChange={(e) => setSelectedDeviceId(e.target.value || null)}
+            disabled={iosBlocked}
             title="Target device"
           >
             <option value="">No device</option>
-            {devices.filter((d) => d.kind === 'device').length > 0 && (
+            {kindDevices.filter((d) => d.kind === 'device').length > 0 && (
               <optgroup label="Devices">
-                {devices.filter((d) => d.kind === 'device').map((d) => (
+                {kindDevices.filter((d) => d.kind === 'device').map((d) => (
                   <option key={d.id} value={d.id}>{d.name} ({d.state})</option>
                 ))}
               </optgroup>
             )}
-            {devices.filter((d) => d.kind === 'emulator').length > 0 && (
+            {kindDevices.filter((d) => d.kind === 'emulator').length > 0 && (
               <optgroup label="Emulators / Simulators">
-                {devices.filter((d) => d.kind === 'emulator').map((d) => (
+                {kindDevices.filter((d) => d.kind === 'emulator').map((d) => (
                   <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
               </optgroup>
@@ -253,40 +253,26 @@ export default function MobileServiceColumn({
 
       {/* Primary actions row */}
       <div className="mobile-actions mobile-actions--row1">
-        {platform === 'flutter' ? (
+        {isIos ? (
           <>
-            <ActionButton label="▶ Run" disabled={taskBusy || iosBlocked} onClick={() => run(() => window.launcher.mobileRunOnDevice(runArgs))} />
-            <ActionButton label="🔨 Build" disabled={taskBusy} onClick={() => run(() => window.launcher.mobileBuild(buildArgs))} />
-            <ActionButton label="📦 Release" disabled={taskBusy} onClick={() => run(() => window.launcher.mobileGenerateRelease(buildArgs))} variant="primary" />
-            <ActionButton label="🧹 Clean" disabled={taskBusy} onClick={() => run(() => window.launcher.mobileClean({ projectPath: project.path }))} />
-          </>
-        ) : platform === 'ios' ? (
-          <>
-            <ActionButton label="▶ Simulator" disabled={taskBusy || iosBlocked} onClick={() => run(() => window.launcher.mobileRunOnEmulator(runArgs))} />
-            <ActionButton label="📱 Device" disabled={taskBusy || iosBlocked || !selectedDeviceId} onClick={() => run(() => window.launcher.mobileRunOnDevice(runArgs))} />
-            <ActionButton label="📦 Archive" disabled={taskBusy || iosBlocked} onClick={() => run(() => window.launcher.mobileGenerateRelease(buildArgs))} variant="primary" />
-            <ActionButton label="🧹 Clean" disabled={taskBusy || iosBlocked} onClick={() => run(() => window.launcher.mobileClean({ projectPath: project.path }))} />
-          </>
-        ) : platform === 'compose-multiplatform' ? (
-          <>
-            <ActionButton label="▶ Run" disabled={taskBusy} onClick={() => run(() => window.launcher.mobileRunOnEmulator(runArgs))} />
-            <ActionButton label="🔨 Build" disabled={taskBusy} onClick={() => run(() => window.launcher.mobileBuild(buildArgs))} />
-            <ActionButton label="📦 Release" disabled={taskBusy} onClick={() => run(() => window.launcher.mobileGenerateRelease(buildArgs))} variant="primary" />
-            <ActionButton label="🧹 Clean" disabled={taskBusy} onClick={() => run(() => window.launcher.mobileClean({ projectPath: project.path }))} />
+            <ActionButton label="▶ Simulator" disabled={taskBusy || iosBlocked} onClick={doRunEmu} />
+            <ActionButton label="📱 Device" disabled={taskBusy || iosBlocked || !selectedDeviceId} onClick={doRunDevice} />
+            <ActionButton label="📦 Archive" disabled={taskBusy || iosBlocked} onClick={doRelease} variant="primary" />
+            <ActionButton label="🧹 Clean" disabled={taskBusy || iosBlocked} onClick={doClean} />
           </>
         ) : (
           <>
-            <ActionButton label="▶ Run" disabled={taskBusy} onClick={() => run(() => window.launcher.mobileRunOnDevice(runArgs))} />
-            <ActionButton label="🔨 Build" disabled={taskBusy} onClick={() => run(() => window.launcher.mobileBuild(buildArgs))} />
-            <ActionButton label="📦 Release" disabled={taskBusy} onClick={() => run(() => window.launcher.mobileGenerateRelease(buildArgs))} variant="primary" />
-            <ActionButton label="🧹 Clean" disabled={taskBusy} onClick={() => run(() => window.launcher.mobileClean({ projectPath: project.path }))} />
+            <ActionButton label="▶ Run" disabled={taskBusy} onClick={primaryRun} />
+            <ActionButton label="🔨 Build" disabled={taskBusy} onClick={doBuild} />
+            <ActionButton label="📦 Release" disabled={taskBusy} onClick={doRelease} variant="primary" />
+            <ActionButton label="🧹 Clean" disabled={taskBusy} onClick={doClean} />
           </>
         )}
       </div>
 
       {/* Secondary actions row */}
       <div className="mobile-actions mobile-actions--row2">
-        {(platform === 'android' || platform === 'react-native') && (
+        {kind === 'android' && (
           <>
             <ActionButton
               label="📥 Install"
@@ -311,7 +297,7 @@ export default function MobileServiceColumn({
             />
           </>
         )}
-        {platform === 'ios' && (
+        {kind === 'ios' && (
           <ActionButton
             label="🔬 Logs"
             disabled={taskBusy || iosBlocked}
@@ -320,16 +306,8 @@ export default function MobileServiceColumn({
         )}
         {platform === 'flutter' && (
           <>
-            <ActionButton
-              label="📦 pub get"
-              disabled={taskBusy}
-              onClick={() => run(() => window.launcher.mobilePubGet({ projectPath: project.path }))}
-            />
-            <ActionButton
-              label="🩺 Doctor"
-              disabled={taskBusy}
-              onClick={() => run(() => window.launcher.mobileFlutterDoctor({ projectPath: project.path }))}
-            />
+            <ActionButton label="📦 pub get" disabled={taskBusy} onClick={() => run(() => window.launcher.mobilePubGet({ projectPath: project.path }))} />
+            <ActionButton label="🩺 Doctor" disabled={taskBusy} onClick={() => run(() => window.launcher.mobileFlutterDoctor({ projectPath: project.path }))} />
           </>
         )}
 
@@ -374,17 +352,20 @@ export default function MobileServiceColumn({
         </div>
       )}
 
-      {/* Firebase status chips */}
-      {(fbAndroid?.enabled || fbIos?.enabled) && (
+      {/* Firebase status chips (only those relevant to this column's platform) */}
+      {((kind === 'android' && fbAndroid?.enabled) ||
+        (kind === 'ios' && fbIos?.enabled) ||
+        (kind === 'desktop' && fbDesktop?.enabled)) && (
         <div className="mobile-firebase-row">
           🔥
-          {fbAndroid?.enabled && <span className="mobile-fb-chip mobile-fb-chip--android">Android</span>}
-          {fbIos?.enabled && <span className="mobile-fb-chip mobile-fb-chip--ios">iOS</span>}
+          {kind === 'android' && fbAndroid?.enabled && <span className="mobile-fb-chip mobile-fb-chip--android">Android</span>}
+          {kind === 'ios' && fbIos?.enabled && <span className="mobile-fb-chip mobile-fb-chip--ios">iOS</span>}
+          {kind === 'desktop' && fbDesktop?.enabled && <span className="mobile-fb-chip mobile-fb-chip--android">Desktop</span>}
         </div>
       )}
 
-      {/* Signing status */}
-      {mobileConfig?.androidSigning?.keystorePath && (
+      {/* Signing status (android-capable columns) */}
+      {kind === 'android' && mobileConfig?.androidSigning?.keystorePath && (
         <div className="mobile-signing-badge">
           🔑 Keystore configured
         </div>

@@ -20,12 +20,29 @@ function entryFlags(ep: FlutterEntryPoint | null, globalFlags: MobileConfig['glo
   return flags;
 }
 
+function desktopFlutterTarget(): 'macos' | 'windows' | 'linux' {
+  if (process.platform === 'darwin') return 'macos';
+  if (process.platform === 'win32') return 'windows';
+  return 'linux';
+}
+
+/** `flutter build <sub>` for the column's target (android by default). */
+function buildSubcommand(target: MobileCommandContext['kmpTarget'], release: boolean): string {
+  switch (target) {
+    case 'ios': return release ? 'build ipa --release' : 'build ios --no-codesign';
+    case 'web': return release ? 'build web --release' : 'build web';
+    case 'desktop': return `build ${desktopFlutterTarget()}${release ? ' --release' : ''}`;
+    case 'android':
+    default: return release ? 'build appbundle --release' : 'build apk';
+  }
+}
+
 const commands: MobileCommands = {
   platform: 'flutter',
 
   buildCommand(ctx) {
     const ep = ctx.flutterEntryPoint ?? defaultEntry(ctx);
-    return ['flutter build apk', ...entryFlags(ep, ctx.config.globalFlags)].join(' ');
+    return [`flutter ${buildSubcommand(ctx.kmpTarget, false)}`, ...entryFlags(ep, ctx.config.globalFlags)].join(' ');
   },
 
   cleanCommand() {
@@ -43,7 +60,7 @@ const commands: MobileCommands = {
 
   releaseCommand(ctx) {
     const ep = ctx.flutterEntryPoint ?? defaultEntry(ctx);
-    return ['flutter build appbundle --release', ...entryFlags(ep, ctx.config.globalFlags)].join(' ');
+    return [`flutter ${buildSubcommand(ctx.kmpTarget, true)}`, ...entryFlags(ep, ctx.config.globalFlags)].join(' ');
   },
 
   logsCommand(_ctx, deviceId) {

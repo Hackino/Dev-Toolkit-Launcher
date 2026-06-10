@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { BackendProjectType, ProjectConfig } from '../../shared/types';
+import type { BackendProjectType, ProjectConfig, MobilePlatform } from '../../shared/types';
 import { isMobileType } from '../../shared/category';
+import { isMultiPlatform, columnTargetsFor, type MobileColumnTarget } from './features/mobileColumnTargets';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useTerminals } from './hooks/useTerminals';
 import { useDevices } from './hooks/useDevices';
@@ -121,8 +122,29 @@ export default function App() {
       />
 
       {(() => {
-        const totalCols = Math.max(activeProjects.length, 6);
-        const emptyCols = activeProjects.length < 6 ? 6 - activeProjects.length : 0;
+        // Fan out multi-platform mobile projects (Flutter / RN / KMP) into one
+        // column per platform target; everything else is a single column.
+        type Spec =
+          | { kind: 'mobile'; project: ProjectConfig; target: MobileColumnTarget | null }
+          | { kind: 'backend'; project: ProjectConfig };
+        const specs: Spec[] = [];
+        for (const project of activeProjects) {
+          if (isMobileType(project.type)) {
+            const mp = project.type as MobilePlatform;
+            const md = mobileData[project.path];
+            const targets = isMultiPlatform(mp) ? columnTargetsFor(mp, md?.config ?? null) : [];
+            if (targets.length > 0) {
+              for (const target of targets) specs.push({ kind: 'mobile', project, target });
+            } else {
+              specs.push({ kind: 'mobile', project, target: null });
+            }
+          } else {
+            specs.push({ kind: 'backend', project });
+          }
+        }
+
+        const totalCols = Math.max(specs.length, 6);
+        const emptyCols = specs.length < 6 ? 6 - specs.length : 0;
         return (
           <div
             className="columns"
@@ -144,14 +166,16 @@ export default function App() {
               </div>
             ) : (
               <>
-                {activeProjects.map((project, i) => {
-                  if (isMobileType(project.type)) {
+                {specs.map((spec, i) => {
+                  if (spec.kind === 'mobile') {
+                    const { project, target } = spec;
                     const md = mobileData[project.path];
                     return (
                       <MobileServiceColumn
-                        key={project.id}
+                        key={`${project.id}:${target?.key ?? 'main'}`}
                         index={i + 1}
                         project={project}
+                        target={target}
                         mobileConfig={md?.config ?? null}
                         firebase={md?.firebase ?? []}
                         devices={deviceMap[project.path] ?? []}
@@ -162,6 +186,7 @@ export default function App() {
                       />
                     );
                   }
+                  const { project } = spec;
                   return (
                     <ServiceColumn
                       key={project.id}

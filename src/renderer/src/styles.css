@@ -1859,6 +1859,7 @@ html, body, #root { background: var(--backdrop); background-attachment: fixed; }
   background: transparent;
   gap: 0;
   padding: 10px 8px;
+  min-height: 0;   /* keep the 1fr row bounded so it scrolls instead of overflowing */
 }
 
 .column {
@@ -2025,13 +2026,20 @@ html, body, #root { background: var(--backdrop); background-attachment: fixed; }
   .terminal-tab { transition: none !important; }
 }
 
-/* Compose Multiplatform has a long name — let its column badge wrap to 2 lines */
+/* Compose Multiplatform has a long name — let its column badge wrap to 2 lines.
+   inline-block keeps the wrapped text inside the single padded pill (an inline
+   span splits its background/padding across lines and spills out). */
 .column.mobile-column[data-platform="compose-multiplatform"] .mobile-type-name {
+  display: inline-block;
   white-space: normal;
-  max-width: 92px;
-  line-height: 1.2;
+  max-width: 100%;
+  line-height: 1.25;
   text-align: center;
+  overflow-wrap: anywhere;
 }
+/* The badge column must be allowed to shrink so the pill can't push past the card */
+.column.mobile-column .column-badges { min-width: 0; }
+.column.mobile-column .column-logo-group { min-width: 0; flex: 1; }
 
 /* ─── Mobile form: pinned tabs + scrollable body ───────────────────────────── */
 .wm-project-editor.mobile-form {
@@ -2156,3 +2164,19 @@ html, body, #root { background: var(--backdrop); background-attachment: fixed; }
   padding-left: 6px;
   border-left: 2px solid var(--glass-border);
 }
+
+/* ─── Per-platform column target badge (Flutter/RN/KMP fan-out) ─────────────── */
+.mobile-target-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--glass-border);
+}
+.mobile-target-badge[data-kind="android"] { background: rgba(61,220,132,0.16); color: #6ee7a8; border-color: rgba(61,220,132,0.3); }
+.mobile-target-badge[data-kind="ios"]     { background: rgba(200,210,225,0.16); color: #d7dde7; border-color: rgba(200,210,225,0.28); }
+.mobile-target-badge[data-kind="desktop"] { background: rgba(124,108,255,0.18); color: #c5bcff; border-color: rgba(124,108,255,0.34); }
+.mobile-target-badge[data-kind="web"]     { background: rgba(84,196,246,0.16); color: #a9e0fb; border-color: rgba(84,196,246,0.3); }
