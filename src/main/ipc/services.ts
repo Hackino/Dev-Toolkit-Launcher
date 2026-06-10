@@ -1,0 +1,51 @@
+import { ipcMain } from 'electron';
+import { ProjectRepository } from '../db/ProjectRepository';
+import { RunProfileRepository } from '../db/RunProfileRepository';
+import { StrategyRegistry } from '../process/StrategyRegistry';
+import {
+  startService,
+  stopService,
+  killServicePort,
+  statusSnapshot,
+} from '../process-manager';
+
+export function registerServiceIpc() {
+  ipcMain.handle(
+    'service:start',
+    async (_e, args: { projectPath: string; profileId?: string | null }) => {
+      const project = ProjectRepository.findByPath(args.projectPath);
+      if (!project) return { ok: false, error: `project not found for path: ${args.projectPath}` };
+
+      const strategy = StrategyRegistry.get(project.type);
+
+      let runCommand: string;
+      let port: number | null;
+
+      if (args.profileId) {
+        const profile = RunProfileRepository.findById(args.profileId);
+        if (!profile) return { ok: false, error: `profile not found: ${args.profileId}` };
+        runCommand = strategy.resolveCommand(project.path, profile.runCommand);
+        port = profile.port;
+      } else {
+        runCommand = strategy.resolveCommand(project.path, project.runCommand);
+        port = project.port;
+      }
+
+      return startService({
+        projectPath: project.path,
+        port,
+        runCommand,
+        env: project.env,
+      });
+    },
+  );
+
+  ipcMain.handle('service:stop', (_e, args: { projectPath: string }) => stopService(args));
+
+  ipcMain.handle(
+    'service:killPort',
+    (_e, args: { projectPath: string; port: number | null }) => killServicePort(args),
+  );
+
+  ipcMain.handle('service:status', () => statusSnapshot());
+}

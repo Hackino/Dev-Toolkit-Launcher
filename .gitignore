@@ -1,0 +1,34 @@
+# ── Build output ───────────────────────────────────────────────────────────────
+node_modules/
+out/
+release/
+dist/
+.vite/
+
+# ── Logs ───────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+
+# ── Database — NEVER commit. User data lives in OS userData dir, not here. ────
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# ── Environment / secrets ──────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── OS / editor artifacts ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.bak
+*.swp
+*~
+
+# ── TypeScript build info (local caches) ───────────────────────────────────────
+*.tsbuildinfo
