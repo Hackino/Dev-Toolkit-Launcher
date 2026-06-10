@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react';
-import type { ProjectConfig } from '../../shared/types';
+import type { BackendProjectType, ProjectConfig } from '../../shared/types';
+import { isMobileType } from '../../shared/category';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useTerminals } from './hooks/useTerminals';
+import { useDevices } from './hooks/useDevices';
+import { useMobile } from './hooks/useMobile';
 import ServiceColumn from './components/ServiceColumn';
+import MobileServiceColumn from './components/MobileServiceColumn';
 import TerminalDock from './components/TerminalDock';
 import WorkspaceTabs from './components/WorkspaceTabs';
 import WorkspaceManager from './components/WorkspaceManager';
+
+type BackendProjectConfig = Omit<ProjectConfig, 'type'> & { type: BackendProjectType };
 
 export default function App() {
   const {
@@ -22,6 +28,9 @@ export default function App() {
   } = useWorkspaces();
 
   const terminals = useTerminals();
+  const allProjectsList = Object.values(projects).flat();
+  const deviceMap = useDevices(allProjectsList);
+  const mobileData = useMobile(allProjectsList);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [managerOpen, setManagerOpen] = useState(false);
   const [selectedProfiles, setSelectedProfiles] = useState<Record<string, string | null>>({});
@@ -84,7 +93,7 @@ export default function App() {
   }
 
   // All projects across workspaces (needed by terminal dock for project name lookup)
-  const allProjects: ProjectConfig[] = Object.values(projects).flat();
+  const allProjects: ProjectConfig[] = allProjectsList;
 
   return (
     <div className="app">
@@ -135,24 +144,43 @@ export default function App() {
               </div>
             ) : (
               <>
-                {activeProjects.map((project, i) => (
-                  <ServiceColumn
-                    key={project.id}
-                    index={i + 1}
-                    project={project}
-                    status={statusOf(project)}
-                    busy={!!busy[project.path]}
-                    profiles={profiles[project.id] ?? []}
-                    selectedProfileId={selectedProfiles[project.id] ?? null}
-                    onSelectProfile={(id) =>
-                      setSelectedProfiles((prev) => ({ ...prev, [project.id]: id }))
-                    }
-                    localIp={localIp}
-                    onRun={() => handleStart(project)}
-                    onStop={() => handleStop(project)}
-                    onKillPort={() => handleKillPort(project)}
-                  />
-                ))}
+                {activeProjects.map((project, i) => {
+                  if (isMobileType(project.type)) {
+                    const md = mobileData[project.path];
+                    return (
+                      <MobileServiceColumn
+                        key={project.id}
+                        index={i + 1}
+                        project={project}
+                        mobileConfig={md?.config ?? null}
+                        firebase={md?.firebase ?? []}
+                        devices={deviceMap[project.path] ?? []}
+                        status={statusOf(project)}
+                        busy={!!busy[project.path]}
+                        lastBuild={md?.lastBuild ?? null}
+                        onEdit={() => setManagerOpen(true)}
+                      />
+                    );
+                  }
+                  return (
+                    <ServiceColumn
+                      key={project.id}
+                      index={i + 1}
+                      project={project as BackendProjectConfig}
+                      status={statusOf(project)}
+                      busy={!!busy[project.path]}
+                      profiles={profiles[project.id] ?? []}
+                      selectedProfileId={selectedProfiles[project.id] ?? null}
+                      onSelectProfile={(id) =>
+                        setSelectedProfiles((prev) => ({ ...prev, [project.id]: id }))
+                      }
+                      localIp={localIp}
+                      onRun={() => handleStart(project)}
+                      onStop={() => handleStop(project)}
+                      onKillPort={() => handleKillPort(project)}
+                    />
+                  );
+                })}
                 {Array.from({ length: emptyCols }).map((_, i) => (
                   <div key={`empty-${i}`} className="column column-empty" />
                 ))}

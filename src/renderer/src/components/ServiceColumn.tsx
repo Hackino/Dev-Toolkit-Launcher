@@ -1,11 +1,13 @@
-import type { ProjectConfig, ProjectType, RunProfile, ServiceStatus } from '../../../shared/types';
+import type { BackendProjectType, ProjectConfig, ProjectType, RunProfile, ServiceStatus } from '../../../shared/types';
 import { PROJECT_TYPE_LABELS, TECH_TAG_LABELS } from '../../../shared/types';
 import StatusBadge from './StatusBadge';
 import RunStopButton from './RunStopButton';
 
+type BackendProjectConfig = Omit<ProjectConfig, 'type'> & { type: BackendProjectType };
+
 type Props = {
   index: number;
-  project: ProjectConfig;
+  project: BackendProjectConfig;
   status: { status: ServiceStatus; lastExitCode: number | null };
   busy: boolean;
   profiles: RunProfile[];
@@ -17,7 +19,7 @@ type Props = {
   onKillPort: () => void;
 };
 
-const TYPE_COLORS: Record<ProjectType, string> = {
+const TYPE_COLORS: Record<BackendProjectType, string> = {
   'dotnet':      '#512bd4',
   'spring-boot': '#6db33f',
   'ktor':        '#e05522',
@@ -38,7 +40,7 @@ const TAG_COLORS: Record<string, { bg: string; fg: string }> = {
   docker:     { bg: '#2496ed', fg: '#fff' },
 };
 
-const TYPE_FG: Record<ProjectType, string> = {
+const TYPE_FG: Record<BackendProjectType, string> = {
   'dotnet':      '#fff',
   'spring-boot': '#fff',
   'ktor':        '#fff',
@@ -49,7 +51,7 @@ const TYPE_FG: Record<ProjectType, string> = {
   'nestjs':      '#fff',
 };
 
-function TypeIcon({ type, color }: { type: ProjectType; color: string }) {
+function TypeIcon({ type, color }: { type: BackendProjectType; color: string }) {
   switch (type) {
     case 'react':
       return (
@@ -117,7 +119,7 @@ function TypeIcon({ type, color }: { type: ProjectType; color: string }) {
   }
 }
 
-function TypeLogo({ type }: { type: ProjectType }) {
+function TypeLogo({ type }: { type: BackendProjectType }) {
   return (
     <svg width="38" height="38" viewBox="0 0 48 48" fill="none" className="column-type-logo">
       <rect width="48" height="48" rx="10" fill={TYPE_COLORS[type]} />

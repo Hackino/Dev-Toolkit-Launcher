@@ -5,14 +5,17 @@ import type {
   ProjectCreateInput,
   ProjectUpdateInput,
   ProjectType,
+  ProjectCategory,
 } from '../../shared/types';
 import { StrategyRegistry } from '../process/StrategyRegistry';
+import { categoryOfType } from '../../shared/category';
 
 type ProjectRow = {
   id: string;
   workspace_id: string;
   name: string;
   type: string;
+  category: string;
   path: string;
   port: number | null;
   https: number;
@@ -26,11 +29,13 @@ type ProjectRow = {
 };
 
 function toConfig(row: ProjectRow): ProjectConfig {
+  const type = row.type as ProjectType;
   return {
     id: row.id,
     workspaceId: row.workspace_id,
     name: row.name,
-    type: row.type as ProjectType,
+    type,
+    category: (row.category ?? categoryOfType(type)) as ProjectCategory,
     path: row.path,
     port: row.port,
     https: Boolean(row.https),
@@ -80,18 +85,29 @@ export const ProjectRepository = {
         .get(input.workspaceId) as { m: number }
     ).m;
 
-    const strategy = StrategyRegistry.get(input.type);
-    const runCommand = input.runCommand ?? strategy.defaultRunCommand;
-    const port = input.port !== undefined ? (input.port ?? null) : strategy.defaultPort;
+    const category = input.category ?? categoryOfType(input.type);
+
+    // Mobile projects don't need a strategy-based run command (they use mobile:build IPC)
+    let runCommand: string;
+    let port: number | null;
+    if (category === 'mobile') {
+      runCommand = input.runCommand ?? '';
+      port = input.port !== undefined ? (input.port ?? null) : null;
+    } else {
+      const strategy = StrategyRegistry.get(input.type);
+      runCommand = input.runCommand ?? strategy.defaultRunCommand;
+      port = input.port !== undefined ? (input.port ?? null) : strategy.defaultPort;
+    }
 
     db.prepare(`
-      INSERT INTO projects (id, workspace_id, name, type, path, port, https, external_url, tags, env, run_command, build_command, position, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO projects (id, workspace_id, name, type, category, path, port, https, external_url, tags, env, run_command, build_command, position, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       input.workspaceId,
       input.name.trim(),
       input.type,
+      category,
       input.path,
       port,
       input.https ? 1 : 0,
@@ -109,6 +125,7 @@ export const ProjectRepository = {
       workspace_id: input.workspaceId,
       name: input.name.trim(),
       type: input.type,
+      category,
       path: input.path,
       port,
       https: input.https ? 1 : 0,
@@ -132,6 +149,7 @@ export const ProjectRepository = {
 
     if (input.name !== undefined) { fields.push('name = ?'); values.push(input.name.trim()); }
     if (input.type !== undefined) { fields.push('type = ?'); values.push(input.type); }
+    if (input.category !== undefined) { fields.push('category = ?'); values.push(input.category); }
     if (input.path !== undefined) { fields.push('path = ?'); values.push(input.path); }
     if (input.port !== undefined) { fields.push('port = ?'); values.push(input.port); }
     if (input.https !== undefined) { fields.push('https = ?'); values.push(input.https ? 1 : 0); }

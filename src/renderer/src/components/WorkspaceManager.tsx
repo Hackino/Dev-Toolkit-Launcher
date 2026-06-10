@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type {
+  ProjectCategory,
   ProjectConfig,
   ProjectCreateInput,
   ProjectType,
@@ -10,6 +11,9 @@ import type {
   WorkspaceConfig,
 } from '../../../shared/types';
 import { PROJECT_TYPE_LABELS, TECH_TAG_LABELS } from '../../../shared/types';
+import MobileFormPanel from './mobile/MobileFormPanel';
+import { PlatformLogo } from './mobile/mobileLogos';
+import { isMobileType } from '../../../shared/category';
 
 const AVAILABLE_TAGS = Object.keys(TECH_TAG_LABELS) as TechTag[];
 
@@ -19,7 +23,8 @@ type Props = {
   onChanged: () => void;
 };
 
-const PROJECT_TYPES = Object.keys(PROJECT_TYPE_LABELS) as ProjectType[];
+// Backend/Web Type dropdown lists backend types only — mobile platforms live in the Mobile tab.
+const PROJECT_TYPES = (Object.keys(PROJECT_TYPE_LABELS) as ProjectType[]).filter((t) => !isMobileType(t));
 
 // ─── Empty form ───────────────────────────────────────────────────────────────
 
@@ -414,6 +419,7 @@ export default function WorkspaceManager({ open, onClose, onChanged }: Props) {
   const [newWsName, setNewWsName] = useState('');
   const [editingProject, setEditingProject] = useState<EditingProject | null>(null);
   const [projectForm, setProjectForm] = useState<ProjectForm>(EMPTY_FORM);
+  const [categoryTab, setCategoryTab] = useState<ProjectCategory>('backend');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -487,12 +493,14 @@ export default function WorkspaceManager({ open, onClose, onChanged }: Props) {
     if (!selectedWsId) return;
     const defaults = await window.launcher.getProjectTypeDefaults('dotnet');
     setProjectForm({ ...EMPTY_FORM, runCommand: defaults.runCommand });
+    setCategoryTab('backend');
     setEditingProject({ mode: 'create' });
     setError(null);
   };
 
   const startEditProject = (p: ProjectConfig) => {
     setProjectForm(projectToForm(p));
+    setCategoryTab(isMobileType(p.type) ? 'mobile' : 'backend');
     setEditingProject({ mode: 'edit', project: p });
     setError(null);
   };
@@ -634,43 +642,70 @@ export default function WorkspaceManager({ open, onClose, onChanged }: Props) {
               </div>
             ) : editingProject ? (
               // Project editor
-              <div className="wm-project-editor">
-                <div className="wm-pe-header">
-                  <h3>{editingProject.mode === 'create' ? 'New Project' : 'Edit Project'}</h3>
-                  <span className="wm-pe-ws">in {selectedWs.name}</span>
-                </div>
-
-                <ProjectFormPanel
-                  form={projectForm}
-                  onChange={setProjectForm}
-                  onBrowse={browseProjectPath}
-                  onTypeChange={handleTypeChange}
-                />
-
-                {editingProject.mode === 'edit' && (
-                  <ProfilesPanel
-                    projectId={editingProject.project.id}
-                    projectRunCommand={projectForm.runCommand}
-                  />
+              <>
+                {/* Category tabs — shown for create, locked for edit */}
+                {editingProject.mode === 'create' && (
+                  <div className="wm-category-tabs">
+                    {(['backend', 'mobile'] as ProjectCategory[]).map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        className={`wm-category-tab ${categoryTab === cat ? 'active' : ''}`}
+                        onClick={() => setCategoryTab(cat)}
+                      >
+                        {cat === 'backend' ? 'Backend / Web' : 'Mobile'}
+                      </button>
+                    ))}
+                  </div>
                 )}
 
-                {error && <div className="wm-error">{error}</div>}
+                {categoryTab === 'mobile' ? (
+                  <MobileFormPanel
+                    workspaceId={selectedWsId!}
+                    editingProject={editingProject.mode === 'edit' ? editingProject.project : null}
+                    onSaved={async () => { await load(); onChanged(); setEditingProject(null); }}
+                    onCancel={() => setEditingProject(null)}
+                  />
+                ) : (
+                  <div className="wm-project-editor">
+                    <div className="wm-pe-header">
+                      <h3>{editingProject.mode === 'create' ? 'New Project' : 'Edit Project'}</h3>
+                      <span className="wm-pe-ws">in {selectedWs.name}</span>
+                    </div>
 
-                <div className="wm-pe-actions">
-                  <button
-                    type="button"
-                    className="btn ghost"
-                    onClick={() => setEditingProject(null)}
-                    disabled={saving}
-                  >Cancel</button>
-                  <button
-                    type="button"
-                    className="btn primary"
-                    onClick={saveProject}
-                    disabled={saving}
-                  >{saving ? 'Saving…' : editingProject.mode === 'create' ? 'Add Project' : 'Save'}</button>
-                </div>
-              </div>
+                    <ProjectFormPanel
+                      form={projectForm}
+                      onChange={setProjectForm}
+                      onBrowse={browseProjectPath}
+                      onTypeChange={handleTypeChange}
+                    />
+
+                    {editingProject.mode === 'edit' && (
+                      <ProfilesPanel
+                        projectId={editingProject.project.id}
+                        projectRunCommand={projectForm.runCommand}
+                      />
+                    )}
+
+                    {error && <div className="wm-error">{error}</div>}
+
+                    <div className="wm-pe-actions">
+                      <button
+                        type="button"
+                        className="btn ghost"
+                        onClick={() => setEditingProject(null)}
+                        disabled={saving}
+                      >Cancel</button>
+                      <button
+                        type="button"
+                        className="btn primary"
+                        onClick={saveProject}
+                        disabled={saving}
+                      >{saving ? 'Saving…' : editingProject.mode === 'create' ? 'Add Project' : 'Save'}</button>
+                    </div>
+                  </div>
+                )}
+              </>
             ) : (
               // Project list
               <>
@@ -691,12 +726,22 @@ export default function WorkspaceManager({ open, onClose, onChanged }: Props) {
                   <ul className="wm-project-list">
                     {selectedProjects.map((p) => (
                       <li key={p.id} className="wm-project-item">
-                        <span
-                          className="wm-project-type-badge"
-                          data-type={p.type}
-                        >
-                          {PROJECT_TYPE_LABELS[p.type]}
-                        </span>
+                        {isMobileType(p.type) ? (
+                          <span
+                            className="wm-project-type-badge wm-project-badge--mobile"
+                            data-type={p.type}
+                          >
+                            <PlatformLogo platform={p.type} size={14} />
+                            {PROJECT_TYPE_LABELS[p.type]}
+                          </span>
+                        ) : (
+                          <span
+                            className="wm-project-type-badge"
+                            data-type={p.type}
+                          >
+                            {PROJECT_TYPE_LABELS[p.type]}
+                          </span>
+                        )}
                         <div className="wm-project-info">
                           <span className="wm-project-name">{p.name}</span>
                           <span className="wm-project-path" title={p.path}>{p.path}</span>

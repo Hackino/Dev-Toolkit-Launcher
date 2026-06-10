@@ -94,6 +94,58 @@ function runMigrations(db: Database.Database) {
         ALTER TABLE run_profiles ADD COLUMN https INTEGER NOT NULL DEFAULT 0;
       `,
     },
+    {
+      version: 5,
+      sql: `
+        ALTER TABLE projects ADD COLUMN category TEXT NOT NULL DEFAULT 'backend';
+
+        CREATE TABLE mobile_config (
+          project_id        TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+          platform          TEXT NOT NULL,
+          application_id    TEXT,
+          android_module    TEXT,
+          android_configs   TEXT NOT NULL DEFAULT '[]',
+          android_signing   TEXT NOT NULL DEFAULT '{}',
+          ios_workspace     TEXT,
+          ios_configs       TEXT NOT NULL DEFAULT '[]',
+          ios_signing       TEXT NOT NULL DEFAULT '{}',
+          flutter_entries   TEXT NOT NULL DEFAULT '[]',
+          native_build      TEXT NOT NULL DEFAULT '{}',
+          kmp_targets       TEXT NOT NULL DEFAULT '[]',
+          kmp_module        TEXT,
+          global_flags      TEXT NOT NULL DEFAULT '[]',
+          ide_hint          TEXT,
+          created_at        INTEGER NOT NULL
+        );
+      `,
+    },
+    {
+      version: 6,
+      sql: `
+        CREATE TABLE firebase_config (
+          id               TEXT PRIMARY KEY,
+          project_id       TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          platform         TEXT NOT NULL,
+          enabled          INTEGER NOT NULL DEFAULT 0,
+          config_file_path TEXT,
+          app_id           TEXT,
+          UNIQUE(project_id, platform)
+        );
+        CREATE INDEX idx_firebase_project ON firebase_config(project_id);
+
+        CREATE TABLE mobile_build_history (
+          id            TEXT PRIMARY KEY,
+          project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          config_name   TEXT,
+          kmp_target    TEXT,
+          artifact_path TEXT,
+          size_bytes    INTEGER,
+          status        TEXT NOT NULL,
+          built_at      INTEGER NOT NULL
+        );
+        CREATE INDEX idx_build_history_project ON mobile_build_history(project_id);
+      `,
+    },
   ];
 
   const insertMigration = db.prepare(

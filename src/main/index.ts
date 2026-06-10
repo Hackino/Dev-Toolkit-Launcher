@@ -2,7 +2,9 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import { join } from 'node:path';
 import { registerServiceIpc } from './ipc/services';
 import { registerWorkspacesIpc } from './ipc/workspaces';
+import { registerMobileIpc } from './ipc/mobile';
 import { attachToWindow, stopAllSync } from './process-manager';
+import { attachMobileToWindow, stopAllMobileSync } from './process/mobile-process';
 import { getDb, closeDb } from './db/database';
 
 const DEV_SERVER = process.env.ELECTRON_RENDERER_URL;
@@ -35,6 +37,7 @@ function createWindow() {
   }
 
   attachToWindow(mainWindow);
+  attachMobileToWindow(mainWindow);
 }
 
 app.whenReady().then(() => {
@@ -50,6 +53,7 @@ app.whenReady().then(() => {
 
   registerServiceIpc();
   registerWorkspacesIpc();
+  registerMobileIpc();
   createWindow();
 
   app.on('activate', () => {
@@ -63,5 +67,6 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   stopAllSync();
+  stopAllMobileSync();
   closeDb();
 });

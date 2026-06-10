@@ -32,3 +32,6 @@ Thumbs.db
 
 # ── TypeScript build info (local caches) ───────────────────────────────────────
 *.tsbuildinfo
+
+# ── Claude Code ────────────────────────────────────────────────────────────────
+.claude/

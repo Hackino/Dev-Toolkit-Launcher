@@ -1,9 +1,18 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import type {
+  DetectedVariants,
   ExitEvent,
+  FirebaseConfigInput,
   KillPortResult,
   LauncherApi,
   LogEvent,
+  MobileBuildArgs,
+  MobileBuildRecord,
+  MobileConfig,
+  MobileConfigInput,
+  MobileDevice,
+  MobileRunArgs,
+  MobileVersionInfo,
   ProjectConfig,
   ProjectCreateInput,
   ProjectType,
@@ -15,6 +24,7 @@ import type {
   StartResult,
   StatusSnapshot,
   StopResult,
+  VariantDetectArgs,
   WorkspaceConfig,
   WorkspaceCreateInput,
   WorkspaceUpdateInput,
@@ -56,6 +66,58 @@ const api: LauncherApi = {
     ipcRenderer.invoke('profiles:update', id, input) as Promise<RunProfile>,
   deleteProfile: (id: string) =>
     ipcRenderer.invoke('profiles:delete', id) as Promise<void>,
+
+  // Mobile config CRUD
+  getMobileConfig: (projectId: string) =>
+    ipcRenderer.invoke('mobile:getConfig', projectId) as Promise<MobileConfig | null>,
+  saveMobileConfig: (projectId: string, input: MobileConfigInput) =>
+    ipcRenderer.invoke('mobile:saveConfig', projectId, input) as Promise<MobileConfig>,
+  listFirebaseConfigs: (projectId: string) =>
+    ipcRenderer.invoke('mobile:listFirebase', projectId) as ReturnType<LauncherApi['listFirebaseConfigs']>,
+  saveFirebaseConfig: (projectId: string, input: FirebaseConfigInput) =>
+    ipcRenderer.invoke('mobile:saveFirebase', projectId, input) as ReturnType<LauncherApi['saveFirebaseConfig']>,
+
+  // Mobile build actions
+  mobileBuild: (args: MobileBuildArgs) =>
+    ipcRenderer.invoke('mobile:build', args) as ReturnType<LauncherApi['mobileBuild']>,
+  mobileClean: (args: { projectPath: string }) =>
+    ipcRenderer.invoke('mobile:clean', args) as ReturnType<LauncherApi['mobileClean']>,
+  mobileRunOnDevice: (args: MobileRunArgs) =>
+    ipcRenderer.invoke('mobile:runOnDevice', args) as ReturnType<LauncherApi['mobileRunOnDevice']>,
+  mobileRunOnEmulator: (args: MobileRunArgs) =>
+    ipcRenderer.invoke('mobile:runOnEmulator', args) as ReturnType<LauncherApi['mobileRunOnEmulator']>,
+  mobileStopTask: (args: { projectPath: string }) =>
+    ipcRenderer.invoke('mobile:stopTask', args) as ReturnType<LauncherApi['mobileStopTask']>,
+  mobileGenerateRelease: (args: MobileBuildArgs) =>
+    ipcRenderer.invoke('mobile:generateRelease', args) as ReturnType<LauncherApi['mobileGenerateRelease']>,
+  mobileInstallApk: (args: { projectPath: string; deviceId: string; apkPath: string }) =>
+    ipcRenderer.invoke('mobile:installApk', args) as ReturnType<LauncherApi['mobileInstallApk']>,
+  mobileAdbShell: (args: { projectPath: string; deviceId: string; command: string }) =>
+    ipcRenderer.invoke('mobile:adbShell', args) as ReturnType<LauncherApi['mobileAdbShell']>,
+  mobilePubGet: (args: { projectPath: string }) =>
+    ipcRenderer.invoke('mobile:pubGet', args) as ReturnType<LauncherApi['mobilePubGet']>,
+  mobileFlutterDoctor: (args: { projectPath: string }) =>
+    ipcRenderer.invoke('mobile:flutterDoctor', args) as ReturnType<LauncherApi['mobileFlutterDoctor']>,
+  mobileViewLogs: (args: { projectPath: string; deviceId?: string | null }) =>
+    ipcRenderer.invoke('mobile:viewLogs', args) as ReturnType<LauncherApi['mobileViewLogs']>,
+
+  // Mobile devices & utilities
+  mobileListDevices: (args: { projectPath: string }) =>
+    ipcRenderer.invoke('mobile:listDevices', args) as Promise<MobileDevice[]>,
+  mobileListEmulators: (args: { projectPath: string }) =>
+    ipcRenderer.invoke('mobile:listEmulators', args) as Promise<MobileDevice[]>,
+  mobileOpenIde: (args: { projectPath: string }) =>
+    ipcRenderer.invoke('mobile:openIde', args) as Promise<{ ok: boolean; error?: string }>,
+  mobileGetVersionInfo: (args: { projectPath: string }) =>
+    ipcRenderer.invoke('mobile:getVersionInfo', args) as Promise<MobileVersionInfo>,
+  mobileSetVersionInfo: (args: { projectPath: string; info: MobileVersionInfo }) =>
+    ipcRenderer.invoke('mobile:setVersionInfo', args) as Promise<{ ok: boolean; error?: string }>,
+  mobilePickFile: (args: { defaultPath?: string; title?: string; filters?: { name: string; extensions: string[] }[] }) =>
+    ipcRenderer.invoke('mobile:pickFile', args) as Promise<string | null>,
+  mobileGetBuildRecord: (args: { projectPath: string }) =>
+    ipcRenderer.invoke('mobile:getBuildRecord', args) as Promise<MobileBuildRecord | null>,
+  mobileDetectVariants: (args: VariantDetectArgs) =>
+    ipcRenderer.invoke('mobile:detectVariants', args) as Promise<DetectedVariants>,
 
   // Service control
   startService: (args: { projectPath: string; profileId?: string | null }) =>
