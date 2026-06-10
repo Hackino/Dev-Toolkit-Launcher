@@ -313,9 +313,19 @@ export type MobileBuildArgs = {
   configId?: string | null;      // AndroidBuildConfig.id | IosBuildConfig.id
   entryPointId?: string | null;  // FlutterEntryPoint.id
   kmpTarget?: KmpTarget | null;
+  /**
+   * Identifies the independent worker + terminal for this action. For
+   * multi-platform projects each platform column has its own runKey
+   * (`<projectPath>::<target>`) so platforms never affect each other. Defaults
+   * to projectPath when omitted.
+   */
+  runKey?: string;
 };
 
 export type MobileRunArgs = MobileBuildArgs & { deviceId: string };
+
+/** Common shape for mobile task actions that target a specific worker/terminal. */
+export type MobileTaskRef = { projectPath: string; runKey?: string };
 
 // ─── Variant / flavor detection ───────────────────────────────────────────────
 
@@ -361,6 +371,30 @@ export type DetectedMobileAssets = {
 export type ImportAssetResult =
   | { ok: true; relPath: string; detail?: string }
   | { ok: false; error: string };
+
+// ─── Project introspection (detectable settings values) ────────────────────────
+
+export type SigningConfigInfo = {
+  name: string;
+  storeFile: string | null;
+  keyAlias: string | null;
+  storePasswordEnv: string | null;   // referenced env var / gradle property, if any
+  keyPasswordEnv: string | null;
+};
+
+export type MobileIntrospection = {
+  gradleModules: string[];
+  applicationIds: string[];
+  bundleIds: string[];
+  signingConfigs: SigningConfigInfo[];
+  warnings: string[];
+};
+
+export type IntrospectArgs = {
+  projectPath: string;
+  platform?: MobilePlatform;
+  module?: string;
+};
 
 // ─── CRUD inputs ─────────────────────────────────────────────────────────────
 
@@ -487,26 +521,27 @@ export type LauncherApi = {
 
   // Mobile build actions (stream output via service:log channel)
   mobileBuild: (args: MobileBuildArgs) => Promise<MobileActionResult>;
-  mobileClean: (args: { projectPath: string }) => Promise<MobileActionResult>;
+  mobileClean: (args: MobileTaskRef) => Promise<MobileActionResult>;
   mobileRunOnDevice: (args: MobileRunArgs) => Promise<MobileActionResult>;
   mobileRunOnEmulator: (args: MobileRunArgs) => Promise<MobileActionResult>;
-  mobileStopTask: (args: { projectPath: string }) => Promise<StopResult>;
+  mobileStopTask: (args: MobileTaskRef) => Promise<StopResult>;
   mobileGenerateRelease: (args: MobileBuildArgs) => Promise<MobileReleaseResult>;
-  mobileInstallApk: (args: { projectPath: string; deviceId: string; apkPath: string }) => Promise<MobileActionResult>;
-  mobileAdbShell: (args: { projectPath: string; deviceId: string; command: string }) => Promise<MobileActionResult>;
-  mobilePubGet: (args: { projectPath: string }) => Promise<MobileActionResult>;
-  mobileFlutterDoctor: (args: { projectPath: string }) => Promise<MobileActionResult>;
-  mobileViewLogs: (args: { projectPath: string; deviceId?: string | null }) => Promise<MobileActionResult>;
+  mobileInstallApk: (args: MobileTaskRef & { deviceId: string; apkPath: string }) => Promise<MobileActionResult>;
+  mobileAdbShell: (args: MobileTaskRef & { deviceId: string; command: string }) => Promise<MobileActionResult>;
+  mobilePubGet: (args: MobileTaskRef) => Promise<MobileActionResult>;
+  mobileFlutterDoctor: (args: MobileTaskRef) => Promise<MobileActionResult>;
+  mobileViewLogs: (args: MobileTaskRef & { deviceId?: string | null }) => Promise<MobileActionResult>;
 
   // Mobile devices & utilities
   mobileListDevices: (args: { projectPath: string }) => Promise<MobileDevice[]>;
   mobileListEmulators: (args: { projectPath: string }) => Promise<MobileDevice[]>;
-  mobileOpenIde: (args: { projectPath: string }) => Promise<{ ok: boolean; error?: string }>;
+  mobileOpenIde: (args: MobileTaskRef) => Promise<{ ok: boolean; error?: string }>;
   mobileGetVersionInfo: (args: { projectPath: string }) => Promise<MobileVersionInfo>;
   mobileSetVersionInfo: (args: { projectPath: string; info: MobileVersionInfo }) => Promise<{ ok: boolean; error?: string }>;
   mobilePickFile: (args: { defaultPath?: string; title?: string; filters?: { name: string; extensions: string[] }[] }) => Promise<string | null>;
   mobileGetBuildRecord: (args: { projectPath: string }) => Promise<MobileBuildRecord | null>;
   mobileDetectVariants: (args: VariantDetectArgs) => Promise<DetectedVariants>;
+  mobileIntrospect: (args: IntrospectArgs) => Promise<MobileIntrospection>;
   mobileDetectAssets: (args: { projectPath: string; platform: MobilePlatform }) => Promise<DetectedMobileAssets>;
   mobileValidateAsset: (args: { projectPath: string; path: string; kind: AssetKind }) => Promise<AssetValidation>;
   mobileImportAsset: (args: { projectPath: string; srcPath: string; kind: AssetKind; platform: MobilePlatform }) => Promise<ImportAssetResult>;

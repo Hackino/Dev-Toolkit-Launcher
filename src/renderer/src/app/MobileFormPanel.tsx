@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type {
   MobilePlatform,
   AndroidBuildConfig,
@@ -21,7 +21,7 @@ import { GlobalFlagsSection } from '../capabilities/flags/GlobalFlagsSection';
 import { FirebaseSection, DEFAULT_FIREBASE_STATE, type FirebaseFormState } from '../capabilities/firebase/FirebaseSection';
 import { NativeBuildSection, DEFAULT_NATIVE_CONFIG } from '../capabilities/native/NativeBuildSection';
 import { VersionPanel } from '../capabilities/versioning/VersionPanel';
-import { mobileTabsFor, MOBILE_TAB_LABELS, showsIosFirebase, type MobileTabKey } from '../features/registry';
+import { mobileTabsFor, MOBILE_TAB_LABELS, showsIosFirebase, showsDesktopFirebase, type MobileTabKey } from '../features/registry';
 
 const PLATFORMS: MobilePlatform[] = ['android', 'ios', 'flutter', 'react-native', 'compose-multiplatform'];
 
@@ -94,6 +94,55 @@ export default function MobileFormPanel({ workspaceId, editingProject, onSaved, 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Hydrate the form from the saved config + firebase when editing an existing project.
+  useEffect(() => {
+    if (!editingProject) return;
+    let cancelled = false;
+    (async () => {
+      const [config, firebaseList] = await Promise.all([
+        window.launcher.getMobileConfig(editingProject.id),
+        window.launcher.listFirebaseConfigs(editingProject.id),
+      ]);
+      if (cancelled) return;
+
+      const firebase: FirebaseFormState = {
+        android: { ...DEFAULT_FIREBASE_STATE.android },
+        ios: { ...DEFAULT_FIREBASE_STATE.ios },
+        desktop: { ...DEFAULT_FIREBASE_STATE.desktop },
+      };
+      for (const f of firebaseList) {
+        firebase[f.platform] = {
+          enabled: f.enabled,
+          configFilePath: f.configFilePath ?? '',
+          appId: f.appId ?? '',
+        };
+      }
+
+      setState((s) => ({
+        ...s,
+        ...(config
+          ? {
+              applicationId: config.applicationId ?? '',
+              androidModule: config.androidModule ?? 'app',
+              androidConfigs: config.androidBuildConfigs?.length ? config.androidBuildConfigs : s.androidConfigs,
+              androidSigning: config.androidSigning ?? s.androidSigning,
+              iosWorkspace: config.iosWorkspace ?? '',
+              iosConfigs: config.iosBuildConfigs?.length ? config.iosBuildConfigs : s.iosConfigs,
+              iosSigning: config.iosSigning ?? s.iosSigning,
+              flutterEntries: config.flutterEntryPoints?.length ? config.flutterEntryPoints : s.flutterEntries,
+              kmpModule: config.kmpModule ?? 'composeApp',
+              kmpTargets: config.kmpTargets?.length ? config.kmpTargets : s.kmpTargets,
+              kmpIdeHint: config.ideHint ?? '',
+              native: config.native ?? s.native,
+              globalFlags: config.globalFlags ?? [],
+            }
+          : {}),
+        firebase,
+      }));
+    })();
+    return () => { cancelled = true; };
+  }, [editingProject?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const set = <K extends keyof MobileState>(k: K, v: MobileState[K]) =>
     setState((s) => ({ ...s, [k]: v }));
 
@@ -151,28 +200,14 @@ export default function MobileFormPanel({ workspaceId, editingProject, onSaved, 
         ideHint: state.kmpIdeHint || null,
       });
 
-      if (state.firebase.android.enabled) {
+      // Persist every platform (including disabled) so toggles round-trip correctly.
+      for (const fbPlatform of ['android', 'ios', 'desktop'] as const) {
+        const entry = state.firebase[fbPlatform];
         await window.launcher.saveFirebaseConfig(projectId, {
-          platform: 'android',
-          enabled: true,
-          configFilePath: state.firebase.android.configFilePath || null,
-          appId: state.firebase.android.appId || null,
-        });
-      }
-      if (state.firebase.ios.enabled) {
-        await window.launcher.saveFirebaseConfig(projectId, {
-          platform: 'ios',
-          enabled: true,
-          configFilePath: state.firebase.ios.configFilePath || null,
-          appId: state.firebase.ios.appId || null,
-        });
-      }
-      if (state.firebase.desktop.enabled) {
-        await window.launcher.saveFirebaseConfig(projectId, {
-          platform: 'desktop',
-          enabled: true,
-          configFilePath: state.firebase.desktop.configFilePath || null,
-          appId: state.firebase.desktop.appId || null,
+          platform: fbPlatform,
+          enabled: entry.enabled,
+          configFilePath: entry.configFilePath || null,
+          appId: entry.appId || null,
         });
       }
 
@@ -295,6 +330,22 @@ export default function MobileFormPanel({ workspaceId, editingProject, onSaved, 
           />
         )}
 
+        {(activeTab === 'desktop' || activeTab === 'web') && (
+          <div className="mobile-section">
+            <div className="mobile-section-title">{activeTab === 'desktop' ? 'Desktop Target' : 'Web Target'}</div>
+            <div className="mobile-section-hint">
+              {activeTab === 'desktop'
+                ? `Runs the JVM desktop app via :${state.kmpModule || 'composeApp'}:desktopRun. Add JVM/Gradle options in Global Flags.`
+                : `Runs the Wasm web app via :${state.kmpModule || 'composeApp'}:wasmJsBrowserDevelopmentRun. Add web/Gradle options in Global Flags.`}
+            </div>
+            <GlobalFlagsSection
+              platform={state.platform}
+              flags={state.globalFlags}
+              onChange={(v) => set('globalFlags', v)}
+            />
+          </div>
+        )}
+
         {activeTab === 'global' && (
           <GlobalFlagsSection
             platform={state.platform}
@@ -317,7 +368,7 @@ export default function MobileFormPanel({ workspaceId, editingProject, onSaved, 
             platform={state.platform}
             onChange={(v) => set('firebase', v)}
             showIos={showsIosFirebase(state.platform)}
-            showDesktop={state.platform === 'compose-multiplatform'}
+            showDesktop={showsDesktopFirebase(state.platform)}
           />
         )}
 

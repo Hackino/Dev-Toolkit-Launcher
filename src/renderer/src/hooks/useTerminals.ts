@@ -131,6 +131,38 @@ export function useTerminals() {
     [ensureTerm],
   );
 
+  /**
+   * Open or focus a terminal by an arbitrary key + display name. Used by mobile
+   * columns so each platform target gets its own independent terminal (keyed by
+   * its runKey), routing the matching log/exit events to it.
+   */
+  const openTerminal = useCallback(
+    (key: string, name: string, opts: { port?: number | null } = {}) => {
+      ensureTerm(key);
+      const existingIdx = tabsRef.current.findIndex((t) => t.projectPath === key);
+      const nextTab: TerminalTab = {
+        projectPath: key,
+        projectName: name,
+        port: opts.port ?? null,
+        status: 'starting',
+        lastExitCode: null,
+        profileName: null,
+      };
+      if (existingIdx >= 0) {
+        setTabs((prev) => {
+          const next = [...prev];
+          next[existingIdx] = { ...next[existingIdx], projectName: name, status: 'starting' };
+          return next;
+        });
+        setActiveIdx(existingIdx);
+      } else {
+        setTabs((prev) => [...prev, nextTab]);
+        setActiveIdx(tabsRef.current.length);
+      }
+    },
+    [ensureTerm],
+  );
+
   const close = useCallback((projectPath: string) => {
     const entry = termsRef.current.get(projectPath);
     if (entry) {
@@ -204,7 +236,7 @@ export function useTerminals() {
     return () => window.removeEventListener('resize', handler);
   }, [activeIdx]);
 
-  return { tabs, activeIdx, setActiveIdx, openOrFocus, close, writeLine, attachActive };
+  return { tabs, activeIdx, setActiveIdx, openOrFocus, openTerminal, close, writeLine, attachActive };
 }
 
 export type TerminalsApi = ReturnType<typeof useTerminals>;

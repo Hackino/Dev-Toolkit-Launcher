@@ -170,18 +170,25 @@ export default function App() {
                   if (spec.kind === 'mobile') {
                     const { project, target } = spec;
                     const md = mobileData[project.path];
+                    const runKey = `${project.path}${target ? `::${target.key}` : ''}`;
+                    const termLabel = target ? `${project.name} · ${target.label}` : project.name;
+                    const tab = terminals.tabs.find((t) => t.projectPath === runKey);
                     return (
                       <MobileServiceColumn
                         key={`${project.id}:${target?.key ?? 'main'}`}
                         index={i + 1}
                         project={project}
                         target={target}
+                        runKey={runKey}
+                        terminalLabel={termLabel}
                         mobileConfig={md?.config ?? null}
                         firebase={md?.firebase ?? []}
                         devices={deviceMap[project.path] ?? []}
-                        status={statusOf(project)}
+                        status={{ status: tab?.status ?? 'idle', lastExitCode: tab?.lastExitCode ?? null }}
                         busy={!!busy[project.path]}
                         lastBuild={md?.lastBuild ?? null}
+                        onOpenTerminal={terminals.openTerminal}
+                        onLog={terminals.writeLine}
                         onEdit={() => setManagerOpen(true)}
                       />
                     );

@@ -4,6 +4,8 @@ import { BuildConfigEditor, MinifySection, type MinifyState } from '../../capabi
 import { VariantDetector } from '../../capabilities/variants/VariantDetector';
 import { applyAndroidDetection } from '../../capabilities/variants/variantApply';
 import { FileDropField } from '../../capabilities/assets/FileDropField';
+import { useIntrospection } from '../../capabilities/detection/useIntrospection';
+import { DatalistInput } from '../../capabilities/detection/DatalistInput';
 
 const KEYSTORE_FILTER = [{ name: 'Keystore', extensions: ['jks', 'keystore', 'p12', 'pfx'] }];
 
@@ -173,29 +175,62 @@ export function AndroidSettingsSection({
   const setSigning = <K extends keyof AndroidSigningConfig>(k: K, v: AndroidSigningConfig[K]) =>
     onSigningChange({ ...signing, [k]: v });
 
+  const { data: introspect, loading: introspecting, detect } = useIntrospection(projectPath, platform, module);
+
+  const applySigningFromGradle = () => {
+    const sc = introspect?.signingConfigs.find((c) => /release/i.test(c.name)) ?? introspect?.signingConfigs[0];
+    if (!sc) return;
+    onSigningChange({
+      keystorePath: sc.storeFile ?? signing.keystorePath,
+      keyAlias: sc.keyAlias ?? signing.keyAlias,
+      storePasswordEnv: sc.storePasswordEnv ?? signing.storePasswordEnv,
+      keyPasswordEnv: sc.keyPasswordEnv ?? signing.keyPasswordEnv,
+    });
+  };
+
   return (
     <div className="mobile-section">
       <div className="mobile-section-title">Android Settings</div>
 
+      <div className="variant-detect">
+        <span className="variant-detect-label">⚡ Auto-detect settings</span>
+        <div className="variant-detect-spacer" />
+        <button
+          type="button"
+          className="variant-detect-btn variant-detect-btn--deep"
+          disabled={!projectPath.trim() || introspecting}
+          onClick={detect}
+          title="Read module, application IDs, and signing from the project"
+        >
+          <span className={introspecting ? 'variant-spin' : ''}>⟳</span> Detect
+        </button>
+        {!projectPath.trim() && <div className="variant-detect-status">Set the project path above to enable detection.</div>}
+        {introspect && (
+          <div className="variant-detect-status">
+            {introspect.gradleModules.length} module(s) · {introspect.applicationIds.length} app id(s) · {introspect.signingConfigs.length} signing config(s)
+          </div>
+        )}
+      </div>
+
       <div className="pf-field pf-field--row">
         <label className="pf-field pf-field--inline">
           <span>Application ID</span>
-          <input
-            type="text"
+          <DatalistInput
             className="pf-mono"
             placeholder="com.example.app"
             value={applicationId}
-            onChange={(e) => onApplicationIdChange(e.target.value)}
+            options={introspect?.applicationIds ?? []}
+            onChange={onApplicationIdChange}
           />
         </label>
         <label className="pf-field pf-field--inline">
           <span>Gradle module</span>
-          <input
-            type="text"
+          <DatalistInput
             className="pf-mono"
             placeholder="app"
             value={module}
-            onChange={(e) => onModuleChange(e.target.value)}
+            options={introspect?.gradleModules ?? []}
+            onChange={onModuleChange}
           />
         </label>
       </div>
@@ -225,6 +260,11 @@ export function AndroidSettingsSection({
 
       <div className="mobile-subsection-header" style={{ marginTop: 16 }}>
         <span>Keystore / Signing</span>
+        {introspect && introspect.signingConfigs.length > 0 && (
+          <button type="button" className="variant-detect-btn" onClick={applySigningFromGradle} title="Fill from the project's signingConfigs">
+            ⚡ From build.gradle
+          </button>
+        )}
       </div>
       <FileDropField
         label="Keystore (.jks / .keystore)"

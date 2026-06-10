@@ -6,11 +6,13 @@ import type { ServiceStatus, StopResult } from '../../../shared/types';
 
 export type MobileTaskRecord = {
   child: ChildProcess | null;
-  projectPath: string;
+  taskKey: string;
   status: ServiceStatus;
   pid: number | null;
 };
 
+// Keyed by taskKey — the independent worker identity. For multi-platform projects
+// each platform target gets its own key, so platforms never interfere.
 const tasks = new Map<string, MobileTaskRecord>();
 
 let _window: BrowserWindow | null = null;
@@ -19,18 +21,20 @@ export function attachMobileToWindow(win: BrowserWindow): void {
   _window = win;
 }
 
-function emitLog(projectPath: string, stream: 'stdout' | 'stderr' | 'launcher', line: string): void {
+// The log/exit events route to a terminal by their `projectPath` field; for mobile
+// we put the taskKey there so each worker streams to its own terminal.
+function emitLog(taskKey: string, stream: 'stdout' | 'stderr' | 'launcher', line: string): void {
   _window?.webContents.send('service:log', {
-    projectPath,
+    projectPath: taskKey,
     stream,
     line,
     ts: Date.now(),
   });
 }
 
-function emitExit(projectPath: string, code: number | null, status: ServiceStatus): void {
+function emitExit(taskKey: string, code: number | null, status: ServiceStatus): void {
   _window?.webContents.send('service:exit', {
-    projectPath,
+    projectPath: taskKey,
     code,
     status,
     ts: Date.now(),
@@ -48,29 +52,29 @@ function makeLineSplitter(onLine: (line: string) => void): (chunk: Buffer) => vo
 }
 
 export type RunMobileTaskOptions = {
-  projectPath: string;
-  command: string;       // full shell command string
+  taskKey: string;        // independent worker + terminal identity
+  command: string;        // full shell command string
   displayCommand: string; // potentially redacted version for the log
-  cwd: string;
+  cwd: string;            // filesystem working directory (the real project path)
   env?: Record<string, string>;
 };
 
 export function runMobileTask(opts: RunMobileTaskOptions): { ok: true; taskId: string } | { ok: false; error: string } {
-  // Stop any existing task for this project
-  const existing = tasks.get(opts.projectPath);
+  // Stop only the task for THIS key (this platform target), never siblings.
+  const existing = tasks.get(opts.taskKey);
   if (existing?.child && existing.status === 'running') {
     treeKill(existing.child.pid!, 'SIGTERM');
   }
 
   const record: MobileTaskRecord = {
     child: null,
-    projectPath: opts.projectPath,
+    taskKey: opts.taskKey,
     status: 'starting',
     pid: null,
   };
-  tasks.set(opts.projectPath, record);
+  tasks.set(opts.taskKey, record);
 
-  emitLog(opts.projectPath, 'launcher', `▶ ${opts.displayCommand}`);
+  emitLog(opts.taskKey, 'launcher', `▶ ${opts.displayCommand}`);
 
   let child: ChildProcess;
   try {
@@ -80,7 +84,9 @@ export function runMobileTask(opts: RunMobileTaskOptions): { ok: true; taskId: s
       env: { ...process.env, ...opts.env },
     });
   } catch (err) {
-    tasks.delete(opts.projectPath);
+    tasks.delete(opts.taskKey);
+    emitLog(opts.taskKey, 'launcher', `⚠ Failed to start: ${String(err)}`);
+    emitExit(opts.taskKey, -1, 'crashed');
     return { ok: false, error: String(err) };
   }
 
@@ -88,33 +94,37 @@ export function runMobileTask(opts: RunMobileTaskOptions): { ok: true; taskId: s
   record.pid = child.pid ?? null;
   record.status = 'running';
 
-  child.stdout?.on('data', makeLineSplitter((line) => emitLog(opts.projectPath, 'stdout', line)));
-  child.stderr?.on('data', makeLineSplitter((line) => emitLog(opts.projectPath, 'stderr', line)));
+  child.stdout?.on('data', makeLineSplitter((line) => emitLog(opts.taskKey, 'stdout', line)));
+  child.stderr?.on('data', makeLineSplitter((line) => emitLog(opts.taskKey, 'stderr', line)));
+
+  child.on('error', (err) => {
+    emitLog(opts.taskKey, 'launcher', `⚠ Process error: ${err.message}`);
+  });
 
   child.on('close', (code) => {
     const status: ServiceStatus = code === 0 ? 'stopped' : 'crashed';
     record.status = status;
     record.child = null;
-    emitExit(opts.projectPath, code, status);
-    emitLog(opts.projectPath, 'launcher', `⏹ Process exited with code ${code ?? '?'}`);
+    emitExit(opts.taskKey, code, status);
+    emitLog(opts.taskKey, 'launcher', `⏹ Process exited with code ${code ?? '?'}`);
   });
 
-  return { ok: true, taskId: opts.projectPath };
+  return { ok: true, taskId: opts.taskKey };
 }
 
-export function stopMobileTask(projectPath: string): StopResult {
-  const record = tasks.get(projectPath);
+export function stopMobileTask(taskKey: string): StopResult {
+  const record = tasks.get(taskKey);
   if (!record?.child) return { ok: false, error: 'No active mobile task' };
 
   treeKill(record.child.pid!, 'SIGTERM', (err) => {
-    if (err) emitLog(projectPath, 'launcher', `⚠ Stop error: ${err.message}`);
+    if (err) emitLog(taskKey, 'launcher', `⚠ Stop error: ${err.message}`);
   });
   record.status = 'stopped';
   return { ok: true };
 }
 
-export function getMobileTaskStatus(projectPath: string): ServiceStatus {
-  return tasks.get(projectPath)?.status ?? 'idle';
+export function getMobileTaskStatus(taskKey: string): ServiceStatus {
+  return tasks.get(taskKey)?.status ?? 'idle';
 }
 
 export function stopAllMobileSync(): void {

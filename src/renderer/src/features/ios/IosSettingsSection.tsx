@@ -3,6 +3,8 @@ import type { IosBuildConfig, IosSigningConfig, IosSigningStyle, MobilePlatform 
 import { BuildConfigEditor } from '../../capabilities/buildConfig/BuildConfigEditor';
 import { VariantDetector } from '../../capabilities/variants/VariantDetector';
 import { applyIosDetection } from '../../capabilities/variants/variantApply';
+import { useIntrospection } from '../../capabilities/detection/useIntrospection';
+import { DatalistInput } from '../../capabilities/detection/DatalistInput';
 
 function newIosConfig(name: string, scheme: string): IosBuildConfig {
   return {
@@ -145,9 +147,26 @@ export function IosSettingsSection({
   const setSigning = <K extends keyof IosSigningConfig>(k: K, v: IosSigningConfig[K]) =>
     onSigningChange({ ...signing, [k]: v });
 
+  const { data: introspect, loading: introspecting, detect } = useIntrospection(projectPath, platform);
+
   return (
     <div className="mobile-section">
       <div className="mobile-section-title">iOS Settings</div>
+
+      <div className="variant-detect">
+        <span className="variant-detect-label">⚡ Auto-detect settings</span>
+        <div className="variant-detect-spacer" />
+        <button
+          type="button"
+          className="variant-detect-btn variant-detect-btn--deep"
+          disabled={!projectPath.trim() || introspecting}
+          onClick={detect}
+          title="Read bundle IDs from the Xcode project"
+        >
+          <span className={introspecting ? 'variant-spin' : ''}>⟳</span> Detect
+        </button>
+        {introspect && <div className="variant-detect-status">{introspect.bundleIds.length} bundle id(s) found</div>}
+      </div>
 
       <label className="pf-field">
         <span>Workspace / Project path <small>(relative to project root)</small></span>
@@ -188,12 +207,12 @@ export function IosSettingsSection({
       <div className="mobile-signing-grid">
         <label className="pf-field">
           <span>Bundle ID</span>
-          <input
-            type="text"
+          <DatalistInput
             className="pf-mono"
             placeholder="com.example.app"
             value={signing.bundleId ?? ''}
-            onChange={(e) => setSigning('bundleId', e.target.value || null)}
+            options={introspect?.bundleIds ?? []}
+            onChange={(v) => setSigning('bundleId', v || null)}
           />
         </label>
         <label className="pf-field">

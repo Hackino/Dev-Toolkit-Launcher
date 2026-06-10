@@ -3,13 +3,16 @@ import { statSync } from 'node:fs';
 import type {
   MobileBuildArgs,
   MobileRunArgs,
+  MobileTaskRef,
   MobileConfigInput,
   FirebaseConfigInput,
   MobileVersionInfo,
   MobilePlatform,
   VariantDetectArgs,
+  IntrospectArgs,
 } from '../../../shared/types';
 import { detectVariants } from '../../capabilities/detection/variantDetection';
+import { introspectProject } from '../../capabilities/detection/projectIntrospection';
 import { detectAssets, validateAsset, importAsset, type AssetKind } from '../../capabilities/assets/mobileAssets';
 import { MobileConfigRepository } from '../../capabilities/persistence/MobileConfigRepository';
 import { FirebaseConfigRepository } from '../../capabilities/persistence/FirebaseConfigRepository';
@@ -118,7 +121,7 @@ export function registerMobileIpc(): void {
       // Env-kind global flags
       const extraEnv = resolveEnvFlags(ctx.config.globalFlags);
       return runMobileTask({
-        projectPath: args.projectPath,
+        taskKey: args.runKey ?? args.projectPath,
         command,
         displayCommand: command,
         cwd: args.projectPath,
@@ -129,21 +132,21 @@ export function registerMobileIpc(): void {
     }
   });
 
-  ipcMain.handle('mobile:clean', (_e, args: { projectPath: string }) => {
+  ipcMain.handle('mobile:clean', (_e, args: MobileTaskRef) => {
     try {
       const project = getProject(args.projectPath);
       if (!isMobileType(project.type)) return { ok: false, error: 'Not a mobile project' };
       const ctx = buildContext(args.projectPath, { projectPath: args.projectPath });
       const strategy = FeatureRegistry.getMobile(project.type as MobilePlatform).mobile;
       const command = strategy.cleanCommand(ctx);
-      return runMobileTask({ projectPath: args.projectPath, command, displayCommand: command, cwd: args.projectPath });
+      return runMobileTask({ taskKey: args.runKey ?? args.projectPath, command, displayCommand: command, cwd: args.projectPath });
     } catch (err) {
       return { ok: false, error: String(err) };
     }
   });
 
-  ipcMain.handle('mobile:stopTask', (_e, args: { projectPath: string }) => {
-    return stopMobileTask(args.projectPath);
+  ipcMain.handle('mobile:stopTask', (_e, args: MobileTaskRef) => {
+    return stopMobileTask(args.runKey ?? args.projectPath);
   });
 
   // ─── Run on device / emulator ─────────────────────────────────────────────
@@ -156,7 +159,7 @@ export function registerMobileIpc(): void {
       const strategy = FeatureRegistry.getMobile(project.type as MobilePlatform).mobile;
       const command = strategy.runOnDeviceCommand(ctx, args.deviceId);
       const extraEnv = resolveEnvFlags(ctx.config.globalFlags);
-      return runMobileTask({ projectPath: args.projectPath, command, displayCommand: command, cwd: args.projectPath, env: extraEnv });
+      return runMobileTask({ taskKey: args.runKey ?? args.projectPath, command, displayCommand: command, cwd: args.projectPath, env: extraEnv });
     } catch (err) {
       return { ok: false, error: String(err) };
     }
@@ -170,7 +173,7 @@ export function registerMobileIpc(): void {
       const strategy = FeatureRegistry.getMobile(project.type as MobilePlatform).mobile;
       const command = strategy.runOnEmulatorCommand(ctx, args.deviceId);
       const extraEnv = resolveEnvFlags(ctx.config.globalFlags);
-      return runMobileTask({ projectPath: args.projectPath, command, displayCommand: command, cwd: args.projectPath, env: extraEnv });
+      return runMobileTask({ taskKey: args.runKey ?? args.projectPath, command, displayCommand: command, cwd: args.projectPath, env: extraEnv });
     } catch (err) {
       return { ok: false, error: String(err) };
     }
@@ -209,7 +212,7 @@ export function registerMobileIpc(): void {
         displayCommand = displayCommand.replace(resolvedEnv[androidSigning.keyPasswordEnv], '***');
       }
 
-      const result = runMobileTask({ projectPath: args.projectPath, command, displayCommand, cwd: args.projectPath, env: resolvedEnv });
+      const result = runMobileTask({ taskKey: args.runKey ?? args.projectPath, command, displayCommand, cwd: args.projectPath, env: resolvedEnv });
       if (!result.ok) return result;
 
       const artifactPath = strategy.expectedArtifactPath(ctx);
@@ -235,10 +238,10 @@ export function registerMobileIpc(): void {
 
   // ─── Install APK ──────────────────────────────────────────────────────────
 
-  ipcMain.handle('mobile:installApk', (_e, args: { projectPath: string; deviceId: string; apkPath: string }) => {
+  ipcMain.handle('mobile:installApk', (_e, args: MobileTaskRef & { deviceId: string; apkPath: string }) => {
     try {
       const command = `adb -s ${args.deviceId} install -r "${args.apkPath}"`;
-      return runMobileTask({ projectPath: args.projectPath, command, displayCommand: command, cwd: args.projectPath });
+      return runMobileTask({ taskKey: args.runKey ?? args.projectPath, command, displayCommand: command, cwd: args.projectPath });
     } catch (err) {
       return { ok: false, error: String(err) };
     }
@@ -246,10 +249,10 @@ export function registerMobileIpc(): void {
 
   // ─── ADB Shell ────────────────────────────────────────────────────────────
 
-  ipcMain.handle('mobile:adbShell', (_e, args: { projectPath: string; deviceId: string; command: string }) => {
+  ipcMain.handle('mobile:adbShell', (_e, args: MobileTaskRef & { deviceId: string; command: string }) => {
     try {
       const command = `adb -s ${args.deviceId} shell ${args.command}`;
-      return runMobileTask({ projectPath: args.projectPath, command, displayCommand: command, cwd: args.projectPath });
+      return runMobileTask({ taskKey: args.runKey ?? args.projectPath, command, displayCommand: command, cwd: args.projectPath });
     } catch (err) {
       return { ok: false, error: String(err) };
     }
@@ -257,17 +260,17 @@ export function registerMobileIpc(): void {
 
   // ─── Pub Get / Flutter Doctor ─────────────────────────────────────────────
 
-  ipcMain.handle('mobile:pubGet', (_e, args: { projectPath: string }) => {
+  ipcMain.handle('mobile:pubGet', (_e, args: MobileTaskRef) => {
     try {
-      return runMobileTask({ projectPath: args.projectPath, command: 'flutter pub get', displayCommand: 'flutter pub get', cwd: args.projectPath });
+      return runMobileTask({ taskKey: args.runKey ?? args.projectPath, command: 'flutter pub get', displayCommand: 'flutter pub get', cwd: args.projectPath });
     } catch (err) {
       return { ok: false, error: String(err) };
     }
   });
 
-  ipcMain.handle('mobile:flutterDoctor', (_e, args: { projectPath: string }) => {
+  ipcMain.handle('mobile:flutterDoctor', (_e, args: MobileTaskRef) => {
     try {
-      return runMobileTask({ projectPath: args.projectPath, command: 'flutter doctor -v', displayCommand: 'flutter doctor -v', cwd: args.projectPath });
+      return runMobileTask({ taskKey: args.runKey ?? args.projectPath, command: 'flutter doctor -v', displayCommand: 'flutter doctor -v', cwd: args.projectPath });
     } catch (err) {
       return { ok: false, error: String(err) };
     }
@@ -275,7 +278,7 @@ export function registerMobileIpc(): void {
 
   // ─── View logs ────────────────────────────────────────────────────────────
 
-  ipcMain.handle('mobile:viewLogs', (_e, args: { projectPath: string; deviceId?: string | null }) => {
+  ipcMain.handle('mobile:viewLogs', (_e, args: MobileTaskRef & { deviceId?: string | null }) => {
     try {
       const project = getProject(args.projectPath);
       if (!isMobileType(project.type)) return { ok: false, error: 'Not a mobile project' };
@@ -285,7 +288,7 @@ export function registerMobileIpc(): void {
       const ctx = buildContext(args.projectPath, { projectPath: args.projectPath });
       const strategy = FeatureRegistry.getMobile(project.type as MobilePlatform).mobile;
       const command = strategy.logsCommand(ctx, args.deviceId ?? null);
-      return runMobileTask({ projectPath: args.projectPath, command, displayCommand: command, cwd: args.projectPath });
+      return runMobileTask({ taskKey: args.runKey ?? args.projectPath, command, displayCommand: command, cwd: args.projectPath });
     } catch (err) {
       return { ok: false, error: String(err) };
     }
@@ -293,7 +296,7 @@ export function registerMobileIpc(): void {
 
   // ─── Device listing ───────────────────────────────────────────────────────
 
-  ipcMain.handle('mobile:listDevices', async (_e, args: { projectPath: string }) => {
+  ipcMain.handle('mobile:listDevices', async (_e, args: MobileTaskRef) => {
     try {
       const project = getProject(args.projectPath);
       const type = project.type as MobilePlatform;
@@ -309,7 +312,7 @@ export function registerMobileIpc(): void {
     }
   });
 
-  ipcMain.handle('mobile:listEmulators', async (_e, args: { projectPath: string }) => {
+  ipcMain.handle('mobile:listEmulators', async (_e, args: MobileTaskRef) => {
     try {
       const project = getProject(args.projectPath);
       const type = project.type as MobilePlatform;
@@ -327,7 +330,7 @@ export function registerMobileIpc(): void {
 
   // ─── Open IDE ─────────────────────────────────────────────────────────────
 
-  ipcMain.handle('mobile:openIde', (_e, args: { projectPath: string }) => {
+  ipcMain.handle('mobile:openIde', (_e, args: MobileTaskRef) => {
     try {
       const project = getProject(args.projectPath);
       if (!isMobileType(project.type)) return { ok: false, error: 'Not a mobile project' };
@@ -335,7 +338,7 @@ export function registerMobileIpc(): void {
       const strategy = FeatureRegistry.getMobile(project.type as MobilePlatform).mobile;
       const cmd = strategy.ideCommand(args.projectPath, config ?? { platform: project.type as MobilePlatform, projectId: project.id, applicationId: null, androidModule: null, androidBuildConfigs: [], androidSigning: { keystorePath: null, keyAlias: null, storePasswordEnv: null, keyPasswordEnv: null }, iosWorkspace: null, iosBuildConfigs: [], iosSigning: { bundleId: null, teamId: null, signingStyle: 'automatic', certificateName: null, provisioningProfile: null, deploymentTarget: null }, flutterEntryPoints: [], native: { enabled: false, cmakeListsPath: null, ndkVersion: null, abiFilters: [], cmakeFlags: [] }, kmpTargets: [], kmpModule: null, globalFlags: [], ideHint: null, createdAt: Date.now() });
       if (!cmd) return { ok: false, error: 'IDE not available on this platform' };
-      const result = runMobileTask({ projectPath: args.projectPath, command: cmd, displayCommand: cmd, cwd: args.projectPath });
+      const result = runMobileTask({ taskKey: args.runKey ?? args.projectPath, command: cmd, displayCommand: cmd, cwd: args.projectPath });
       return { ok: result.ok, error: result.ok ? undefined : result.error };
     } catch (err) {
       return { ok: false, error: String(err) };
@@ -344,7 +347,7 @@ export function registerMobileIpc(): void {
 
   // ─── Version management ───────────────────────────────────────────────────
 
-  ipcMain.handle('mobile:getVersionInfo', (_e, args: { projectPath: string }) => {
+  ipcMain.handle('mobile:getVersionInfo', (_e, args: MobileTaskRef) => {
     try {
       const project = getProject(args.projectPath);
       const type = project.type as MobilePlatform;
@@ -411,7 +414,7 @@ export function registerMobileIpc(): void {
 
   // ─── Build record ─────────────────────────────────────────────────────────
 
-  ipcMain.handle('mobile:getBuildRecord', (_e, args: { projectPath: string }) => {
+  ipcMain.handle('mobile:getBuildRecord', (_e, args: MobileTaskRef) => {
     try {
       const project = getProject(args.projectPath);
       return MobileBuildHistoryRepository.latest(project.id);
@@ -449,6 +452,27 @@ export function registerMobileIpc(): void {
         iosConfigurations: [],
         warnings: [String(err)],
       };
+    }
+  });
+
+  // ─── Project introspection (detectable settings values) ─────────────────────
+
+  ipcMain.handle('mobile:introspect', (_e, args: IntrospectArgs) => {
+    try {
+      let platform = args.platform;
+      let module = args.module;
+      if (!platform || !module) {
+        const project = ProjectRepository.findByPath(args.projectPath);
+        if (project) {
+          platform = platform ?? (project.type as MobilePlatform);
+          const config = MobileConfigRepository.get(project.id);
+          module = module || config?.androidModule || config?.kmpModule || 'app';
+        }
+      }
+      if (!platform) throw new Error('Platform is required to introspect.');
+      return introspectProject(args.projectPath, platform, module || 'app');
+    } catch (err) {
+      return { gradleModules: [], applicationIds: [], bundleIds: [], signingConfigs: [], warnings: [String(err)] };
     }
   });
 

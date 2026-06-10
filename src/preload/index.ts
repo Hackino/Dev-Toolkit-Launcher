@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'ele
 import type {
   AssetKind,
   DetectedVariants,
+  IntrospectArgs,
   ExitEvent,
   FirebaseConfigInput,
   MobilePlatform,
@@ -120,6 +121,8 @@ const api: LauncherApi = {
     ipcRenderer.invoke('mobile:getBuildRecord', args) as Promise<MobileBuildRecord | null>,
   mobileDetectVariants: (args: VariantDetectArgs) =>
     ipcRenderer.invoke('mobile:detectVariants', args) as Promise<DetectedVariants>,
+  mobileIntrospect: (args: IntrospectArgs) =>
+    ipcRenderer.invoke('mobile:introspect', args) as ReturnType<LauncherApi['mobileIntrospect']>,
   mobileDetectAssets: (args: { projectPath: string; platform: MobilePlatform }) =>
     ipcRenderer.invoke('mobile:detectAssets', args) as ReturnType<LauncherApi['mobileDetectAssets']>,
   mobileValidateAsset: (args: { projectPath: string; path: string; kind: AssetKind }) =>

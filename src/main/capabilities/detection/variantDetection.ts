@@ -13,7 +13,7 @@ const DEEP_TIMEOUT_MS = 90_000;
 
 // ─── Generic helpers ──────────────────────────────────────────────────────────
 
-function readIfExists(path: string): string | null {
+export function readIfExists(path: string): string | null {
   try {
     return existsSync(path) ? readFileSync(path, 'utf8') : null;
   } catch {
@@ -49,7 +49,7 @@ function capitalize(s: string): string {
  * Extract the balanced-brace body of a `blockName { … }` block.
  * Returns the inner text (without the outer braces), or null if not found.
  */
-function extractBlock(source: string, blockName: string): string | null {
+export function extractBlock(source: string, blockName: string): string | null {
   const re = new RegExp(`(^|[^\\w.])${blockName}\\s*\\{`, 'm');
   const match = re.exec(source);
   if (!match) return null;
@@ -117,7 +117,7 @@ function parseFlavorDimensions(android: string): string[] {
 
 // ─── Android source location ──────────────────────────────────────────────────
 
-function findAndroidRoot(projectPath: string): string | null {
+export function findAndroidRoot(projectPath: string): string | null {
   const candidates = [
     projectPath,
     join(projectPath, 'android'), // flutter / react-native
@@ -129,7 +129,7 @@ function findAndroidRoot(projectPath: string): string | null {
   return null;
 }
 
-function findModuleGradleFile(projectPath: string, module: string): string | null {
+export function findModuleGradleFile(projectPath: string, module: string): string | null {
   const mod = module || 'app';
   const roots = [projectPath, join(projectPath, 'android')];
   for (const root of roots) {
@@ -205,7 +205,7 @@ function parseFlutterEntryPoints(projectPath: string, result: DetectedVariants):
 
 // ─── iOS static parse ─────────────────────────────────────────────────────────
 
-function findIosRoot(projectPath: string): string | null {
+export function findIosRoot(projectPath: string): string | null {
   const candidates = [projectPath, join(projectPath, 'ios')];
   for (const dir of candidates) {
     if (!existsSync(dir)) continue;

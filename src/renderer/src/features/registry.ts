@@ -10,6 +10,8 @@ export type MobileTabKey =
   | 'platform'
   | 'android'
   | 'ios'
+  | 'desktop'
+  | 'web'
   | 'flutter'
   | 'kmp'
   | 'global'
@@ -21,6 +23,8 @@ export const MOBILE_TAB_LABELS: Record<MobileTabKey, string> = {
   platform: 'Platform',
   android: 'Android',
   ios: 'iOS',
+  desktop: 'Desktop',
+  web: 'Web',
   flutter: 'Flutter',
   kmp: 'KMP',
   global: 'Global Flags',
@@ -35,7 +39,7 @@ const MOBILE_TABS: Record<MobilePlatform, MobileTabKey[]> = {
   'ios': ['platform', 'ios', 'firebase', 'global'],
   'flutter': ['platform', 'flutter', 'android', 'ios', 'firebase', 'global'],
   'react-native': ['platform', 'android', 'ios', 'firebase', 'global'],
-  'compose-multiplatform': ['platform', 'kmp', 'android', 'native', 'firebase', 'global'],
+  'compose-multiplatform': ['platform', 'kmp', 'android', 'ios', 'desktop', 'web', 'native', 'firebase', 'global'],
 };
 
 export function mobileTabsFor(platform: MobilePlatform, isEdit: boolean): MobileTabKey[] {
@@ -45,5 +49,10 @@ export function mobileTabsFor(platform: MobilePlatform, isEdit: boolean): Mobile
 
 /** Whether a platform shows the iOS Firebase row (iOS-capable platforms only). */
 export function showsIosFirebase(platform: MobilePlatform): boolean {
-  return platform === 'ios' || platform === 'flutter' || platform === 'react-native';
+  return platform === 'ios' || platform === 'flutter' || platform === 'react-native' || platform === 'compose-multiplatform';
+}
+
+/** Whether a platform shows the Desktop Firebase row. */
+export function showsDesktopFirebase(platform: MobilePlatform): boolean {
+  return platform === 'compose-multiplatform';
 }

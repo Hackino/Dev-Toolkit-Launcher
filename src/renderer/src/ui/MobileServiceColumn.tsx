@@ -7,6 +7,7 @@ import type {
   ServiceStatus,
   MobileBuildRecord,
   FirebaseConfig,
+  LogStream,
 } from '../../../shared/types';
 import { MOBILE_PLATFORM_LABELS } from '../../../shared/types';
 import { PlatformLogo } from '../capabilities/logos/mobileLogos';
@@ -20,12 +21,17 @@ interface Props {
   project: ProjectConfig;
   /** For multi-platform projects (Flutter/RN/KMP), the platform this column represents. */
   target: MobileColumnTarget | null;
+  /** Independent worker + terminal identity for this column. */
+  runKey: string;
+  terminalLabel: string;
   mobileConfig: MobileConfig | null;
   firebase: FirebaseConfig[];
   devices: MobileDevice[];
   status: { status: ServiceStatus; lastExitCode: number | null };
   busy: boolean;
   lastBuild: MobileBuildRecord | null;
+  onOpenTerminal: (key: string, name: string) => void;
+  onLog: (key: string, stream: LogStream, line: string) => void;
   onEdit?: () => void;
 }
 
@@ -67,25 +73,28 @@ export default function MobileServiceColumn({
   index,
   project,
   target,
+  runKey,
+  terminalLabel,
   mobileConfig,
   firebase,
   devices,
   status,
   busy,
   lastBuild,
+  onOpenTerminal,
+  onLog,
 }: Props) {
   const platform = project.type as MobilePlatform;
   const kind: ColumnTargetKind = target?.kind ?? (platform === 'ios' ? 'ios' : 'android');
   const isIos = kind === 'ios';
   const iosBlocked = isIos && !IS_MACOS;
-  const isRunning = status.status === 'running';
+  const isRunning = status.status === 'running' || status.status === 'starting';
   const usesDevices = kind === 'android' || kind === 'ios';
 
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [taskBusy, setTaskBusy] = useState(false);
-  const [lastError, setLastError] = useState<string | null>(null);
 
   // Set defaults from config
   useEffect(() => {
@@ -104,17 +113,21 @@ export default function MobileServiceColumn({
     async (action: () => Promise<ActionResult>) => {
       if (taskBusy) return;
       setTaskBusy(true);
-      setLastError(null);
+      // Each action streams to this column's own terminal; focus it first.
+      onOpenTerminal(runKey, terminalLabel);
       try {
         const result = await action();
-        if (result && !result.ok && result.error) setLastError(result.error);
+        // All errors are surfaced in the terminal — never popups / toasts / inline UI.
+        if (result && !result.ok && result.error) {
+          onLog(runKey, 'stderr', `✖ ${result.error}`);
+        }
       } catch (e) {
-        setLastError(String(e));
+        onLog(runKey, 'stderr', `✖ ${String(e)}`);
       } finally {
         setTaskBusy(false);
       }
     },
-    [taskBusy],
+    [taskBusy, runKey, terminalLabel, onOpenTerminal, onLog],
   );
 
   const buildArgs = {
@@ -122,6 +135,7 @@ export default function MobileServiceColumn({
     configId: selectedConfigId,
     entryPointId: selectedEntryId,
     kmpTarget: target?.kmpTarget ?? null,
+    runKey,
   };
   const runArgs = { ...buildArgs, deviceId: selectedDeviceId ?? '' };
 
@@ -140,7 +154,7 @@ export default function MobileServiceColumn({
   const doRunEmu = () => run(() => window.launcher.mobileRunOnEmulator(runArgs));
   const doBuild = () => run(() => window.launcher.mobileBuild(buildArgs));
   const doRelease = () => run(() => window.launcher.mobileGenerateRelease(buildArgs));
-  const doClean = () => run(() => window.launcher.mobileClean({ projectPath: project.path }));
+  const doClean = () => run(() => window.launcher.mobileClean({ projectPath: project.path, runKey }));
   const primaryRun = kind === 'android' ? doRunDevice : doRunEmu;
 
   return (
@@ -279,20 +293,20 @@ export default function MobileServiceColumn({
               disabled={taskBusy || !selectedDeviceId || !lastBuild?.lastArtifactPath}
               title={!selectedDeviceId ? 'Select a device first' : !lastBuild?.lastArtifactPath ? 'No artifact available' : 'Install APK on device'}
               onClick={() => run(() =>
-                window.launcher.mobileInstallApk({ projectPath: project.path, deviceId: selectedDeviceId!, apkPath: lastBuild!.lastArtifactPath! })
+                window.launcher.mobileInstallApk({ projectPath: project.path, deviceId: selectedDeviceId!, apkPath: lastBuild!.lastArtifactPath!, runKey })
               )}
             />
             <ActionButton
               label="🔬 Logcat"
               disabled={taskBusy}
-              onClick={() => run(() => window.launcher.mobileViewLogs({ projectPath: project.path, deviceId: selectedDeviceId }))}
+              onClick={() => run(() => window.launcher.mobileViewLogs({ projectPath: project.path, deviceId: selectedDeviceId, runKey }))}
             />
             <ActionButton
               label="💻 ADB Shell"
               disabled={taskBusy || !selectedDeviceId}
               title={!selectedDeviceId ? 'Select a device first' : 'Open ADB shell'}
               onClick={() => run(() =>
-                window.launcher.mobileAdbShell({ projectPath: project.path, deviceId: selectedDeviceId!, command: 'getprop ro.product.model' })
+                window.launcher.mobileAdbShell({ projectPath: project.path, deviceId: selectedDeviceId!, command: 'getprop ro.product.model', runKey })
               )}
             />
           </>
@@ -301,20 +315,20 @@ export default function MobileServiceColumn({
           <ActionButton
             label="🔬 Logs"
             disabled={taskBusy || iosBlocked}
-            onClick={() => run(() => window.launcher.mobileViewLogs({ projectPath: project.path, deviceId: selectedDeviceId }))}
+            onClick={() => run(() => window.launcher.mobileViewLogs({ projectPath: project.path, deviceId: selectedDeviceId, runKey }))}
           />
         )}
         {platform === 'flutter' && (
           <>
-            <ActionButton label="📦 pub get" disabled={taskBusy} onClick={() => run(() => window.launcher.mobilePubGet({ projectPath: project.path }))} />
-            <ActionButton label="🩺 Doctor" disabled={taskBusy} onClick={() => run(() => window.launcher.mobileFlutterDoctor({ projectPath: project.path }))} />
+            <ActionButton label="📦 pub get" disabled={taskBusy} onClick={() => run(() => window.launcher.mobilePubGet({ projectPath: project.path, runKey }))} />
+            <ActionButton label="🩺 Doctor" disabled={taskBusy} onClick={() => run(() => window.launcher.mobileFlutterDoctor({ projectPath: project.path, runKey }))} />
           </>
         )}
 
         <ActionButton
           label="🖥 Open IDE"
           disabled={taskBusy || iosBlocked}
-          onClick={() => run(() => window.launcher.mobileOpenIde({ projectPath: project.path }))}
+          onClick={() => run(() => window.launcher.mobileOpenIde({ projectPath: project.path, runKey }))}
         />
 
         {isRunning && (
@@ -322,7 +336,7 @@ export default function MobileServiceColumn({
             label="■ Stop"
             variant="danger"
             disabled={!isRunning}
-            onClick={() => run(() => window.launcher.mobileStopTask({ projectPath: project.path }))}
+            onClick={() => run(() => window.launcher.mobileStopTask({ projectPath: project.path, runKey }))}
           />
         )}
       </div>
@@ -376,10 +390,6 @@ export default function MobileServiceColumn({
         <div className="mobile-device-badge">
           {activeDevice.kind === 'emulator' ? '🖥' : '📱'} {activeDevice.name}
         </div>
-      )}
-
-      {lastError && (
-        <div className="mobile-error">{lastError}</div>
       )}
     </section>
   );
