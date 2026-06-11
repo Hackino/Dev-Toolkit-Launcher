@@ -35,3 +35,6 @@ Thumbs.db
 
 # ── Claude Code ────────────────────────────────────────────────────────────────
 .claude/
+
+# ── Local test fixtures / sample projects (not part of the app) ────────────────
+test_project/

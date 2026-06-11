@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { TerminalsApi } from '../hooks/useTerminals';
+import TerminalScrollbar from './TerminalScrollbar';
 
 type Props = {
   api: TerminalsApi;
@@ -62,7 +63,10 @@ export default function TerminalDock({ api, onCloseRequestStop }: Props) {
           </ul>
         )}
       </div>
-      <div className="terminal-body" ref={mountRef} />
+      <div className="terminal-body-wrap">
+        <div className="terminal-body" ref={mountRef} />
+        <TerminalScrollbar term={api.activeTerm} />
+      </div>
     </div>
   );
 }

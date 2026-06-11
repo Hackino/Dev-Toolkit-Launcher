@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import type {
   AssetKind,
+  BackendDetectArgs,
   DetectedVariants,
   IntrospectArgs,
   ExitEvent,
@@ -131,8 +132,12 @@ const api: LauncherApi = {
     ipcRenderer.invoke('mobile:importAsset', args) as ReturnType<LauncherApi['mobileImportAsset']>,
 
   // Service control
-  startService: (args: { projectPath: string; profileId?: string | null }) =>
+  detectBackendProfiles: (args: BackendDetectArgs) =>
+    ipcRenderer.invoke('service:detectProfiles', args) as ReturnType<LauncherApi['detectBackendProfiles']>,
+  startService: (args: { projectPath: string; profileName?: string | null }) =>
     ipcRenderer.invoke('service:start', args) as Promise<StartResult>,
+  buildService: (args: { projectPath: string; profileName?: string | null }) =>
+    ipcRenderer.invoke('service:build', args) as ReturnType<LauncherApi['buildService']>,
   stopService: (args: { projectPath: string }) =>
     ipcRenderer.invoke('service:stop', args) as Promise<StopResult>,
   killServicePort: (args: { projectPath: string; port: number | null }) =>

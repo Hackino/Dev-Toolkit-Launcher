@@ -5,17 +5,24 @@ export type PortKillResult = {
   errors: string[];
 };
 
-// Windows-only: find any process currently LISTENING on the given TCP port
-// and force-kill it (with /T to also kill its children).
-//
-// Implementation note: netstat output has subtly different column counts
-// depending on locale and IPv6 entries, so we use a generous regex rather
-// than splitting on whitespace by index.
+const isWindows = process.platform === 'win32';
+
+// Find every process LISTENING on the given TCP port and force-kill it
+// (along with its children). Cross-platform: uses netstat/taskkill on
+// Windows and lsof/kill on macOS and Linux.
 export function killPort(port: number): PortKillResult {
   if (!Number.isFinite(port) || port <= 0) {
     return { killed: [], errors: [`invalid port: ${port}`] };
   }
 
+  return isWindows ? killPortWindows(port) : killPortUnix(port);
+}
+
+// --- Windows ---------------------------------------------------------------
+//
+// netstat output has subtly different column counts depending on locale and
+// IPv6 entries, so we use a generous regex rather than splitting by index.
+function killPortWindows(port: number): PortKillResult {
   const killed: number[] = [];
   const errors: string[] = [];
 
@@ -46,4 +53,65 @@ export function killPort(port: number): PortKillResult {
   }
 
   return { killed, errors };
+}
+
+// --- macOS / Linux ---------------------------------------------------------
+//
+// lsof reports one PID per line for sockets in the LISTEN state. We send
+// SIGTERM first for a graceful shutdown, then SIGKILL anything still bound.
+function killPortUnix(port: number): PortKillResult {
+  const killed: number[] = [];
+  const errors: string[] = [];
+
+  const pids = listenerPids(port);
+  if (pids.length === 0) return { killed, errors };
+
+  for (const pid of pids) {
+    try {
+      process.kill(pid, 'SIGTERM');
+    } catch (e) {
+      const err = e as NodeJS.ErrnoException;
+      if (err.code !== 'ESRCH') errors.push(`pid ${pid} SIGTERM: ${err.message}`);
+    }
+  }
+
+  // Give graceful shutdown a brief window, then force-kill survivors.
+  try {
+    execSync('sleep 0.3', { stdio: 'ignore' });
+  } catch {
+    /* sleep is best-effort */
+  }
+  const survivors = listenerPids(port);
+  for (const pid of survivors) {
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch (e) {
+      const err = e as NodeJS.ErrnoException;
+      if (err.code !== 'ESRCH') errors.push(`pid ${pid} SIGKILL: ${err.message}`);
+    }
+  }
+
+  for (const pid of pids) killed.push(pid);
+  return { killed, errors };
+}
+
+function listenerPids(port: number): number[] {
+  let out: string;
+  try {
+    // -t = terse (PIDs only), restricted to listening TCP sockets on this port.
+    out = execSync(`lsof -nP -iTCP:${port} -sTCP:LISTEN -t`, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  } catch {
+    // lsof exits non-zero when nothing matches — treat as "no listeners".
+    return [];
+  }
+
+  const pids = new Set<number>();
+  for (const line of out.split(/\r?\n/)) {
+    const pid = Number(line.trim());
+    if (Number.isInteger(pid) && pid > 0) pids.add(pid);
+  }
+  return [...pids];
 }

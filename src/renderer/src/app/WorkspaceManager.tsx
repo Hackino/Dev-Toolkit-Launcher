@@ -5,8 +5,7 @@ import type {
   ProjectCreateInput,
   ProjectType,
   ProjectUpdateInput,
-  RunProfile,
-  RunProfileCreateInput,
+  ExternalLink,
   TechTag,
   WorkspaceConfig,
 } from '../../../shared/types';
@@ -26,18 +25,55 @@ type Props = {
 // Backend/Web Type dropdown lists backend types only — mobile platforms live in the Mobile tab.
 const PROJECT_TYPES = (Object.keys(PROJECT_TYPE_LABELS) as ProjectType[]).filter((t) => !isMobileType(t));
 
+// Per-language guidance for what the path must point at.
+type PathGuide = { target: string; example: string; note?: string };
+const PATH_GUIDE: Record<string, PathGuide> = {
+  'dotnet': {
+    target: 'The .csproj project file (not the solution).',
+    example: '~/apps/MyApi/MyApi.csproj',
+    note: 'Profiles are read from Properties/launchSettings.json next to it.',
+  },
+  'spring-boot': {
+    target: 'The project root — the folder containing build.gradle / pom.xml.',
+    example: '~/apps/my-service',
+    note: 'Spring profiles come from src/main/resources/application-*.yml.',
+  },
+  'ktor': {
+    target: 'The project root — the folder containing build.gradle.',
+    example: '~/apps/my-ktor-app',
+    note: 'Port is read from src/main/resources/application.conf.',
+  },
+  'nextjs': { target: 'The app root — the folder containing package.json.', example: '~/apps/my-next-app', note: 'Profiles = your package.json scripts.' },
+  'react': { target: 'The app root — the folder containing package.json.', example: '~/apps/my-react-app', note: 'Profiles = your package.json scripts.' },
+  'nodejs': { target: 'The app root — the folder containing package.json.', example: '~/apps/my-node-app', note: 'Profiles = your package.json scripts.' },
+  'express': { target: 'The app root — the folder containing package.json.', example: '~/apps/my-express-api', note: 'Profiles = your package.json scripts.' },
+  'nestjs': { target: 'The app root — the folder containing package.json.', example: '~/apps/my-nest-api', note: 'Profiles = your package.json scripts.' },
+};
+
+function PathInfoTip({ type }: { type: ProjectType }) {
+  const guide = PATH_GUIDE[type];
+  if (!guide) return null;
+  return (
+    <span className="info-tip" tabIndex={0} aria-label="Path help">
+      <span className="info-tip-icon">ⓘ</span>
+      <span className="info-tip-pop" role="tooltip">
+        <strong>Where should the path point?</strong>
+        <span>{guide.target}</span>
+        <code className="info-tip-example">{guide.example}</code>
+        {guide.note && <span className="info-tip-note">{guide.note}</span>}
+      </span>
+    </span>
+  );
+}
+
 // ─── Empty form ───────────────────────────────────────────────────────────────
 
 type ProjectForm = {
   name: string;
   type: ProjectType;
   path: string;
-  port: string;
-  https: boolean;
-  externalUrl: string;
   tags: string[];
-  runCommand: string;
-  buildCommand: string;
+  externalUrls: ExternalLink[];
   envPairs: Array<{ key: string; value: string }>;
 };
 
@@ -45,51 +81,40 @@ const EMPTY_FORM: ProjectForm = {
   name: '',
   type: 'dotnet',
   path: '',
-  port: '',
-  https: false,
-  externalUrl: '',
   tags: [],
-  runCommand: '',
-  buildCommand: '',
+  externalUrls: [],
   envPairs: [],
 };
 
-function formToCreateInput(form: ProjectForm, workspaceId: string): ProjectCreateInput {
+function envFromPairs(envPairs: ProjectForm['envPairs']): Record<string, string> {
   const env: Record<string, string> = {};
-  for (const { key, value } of form.envPairs) {
+  for (const { key, value } of envPairs) {
     if (key.trim()) env[key.trim()] = value;
   }
+  return env;
+}
+
+function formToCreateInput(form: ProjectForm, workspaceId: string): ProjectCreateInput {
   return {
     workspaceId,
     name: form.name.trim(),
     type: form.type,
     path: form.path.trim(),
-    port: form.port ? parseInt(form.port, 10) : null,
-    https: form.https,
-    externalUrl: form.externalUrl.trim() || null,
+    externalUrls: form.externalUrls.filter((l) => l.url.trim()),
     tags: form.tags,
-    env,
-    runCommand: form.runCommand.trim() || undefined,
-    buildCommand: form.buildCommand.trim() || null,
+    env: envFromPairs(form.envPairs),
+    runCommand: '', // backend run is profile-driven; no manual command
   };
 }
 
 function formToUpdateInput(form: ProjectForm): ProjectUpdateInput {
-  const env: Record<string, string> = {};
-  for (const { key, value } of form.envPairs) {
-    if (key.trim()) env[key.trim()] = value;
-  }
   return {
     name: form.name.trim(),
     type: form.type,
     path: form.path.trim(),
-    port: form.port ? parseInt(form.port, 10) : null,
-    https: form.https,
-    externalUrl: form.externalUrl.trim() || null,
+    externalUrls: form.externalUrls.filter((l) => l.url.trim()),
     tags: form.tags,
-    env,
-    runCommand: form.runCommand.trim(),
-    buildCommand: form.buildCommand.trim() || null,
+    env: envFromPairs(form.envPairs),
   };
 }
 
@@ -98,12 +123,8 @@ function projectToForm(p: ProjectConfig): ProjectForm {
     name: p.name,
     type: p.type,
     path: p.path,
-    port: p.port != null ? String(p.port) : '',
-    https: p.https,
-    externalUrl: p.externalUrl ?? '',
     tags: p.tags,
-    runCommand: p.runCommand,
-    buildCommand: p.buildCommand ?? '',
+    externalUrls: p.externalUrls,
     envPairs: Object.entries(p.env).map(([key, value]) => ({ key, value })),
   };
 }
@@ -136,6 +157,16 @@ function ProjectFormPanel({
     next[i] = { key: k, value: v };
     onChange({ ...form, envPairs: next });
   };
+
+  const addUrlRow = () =>
+    onChange({ ...form, externalUrls: [...form.externalUrls, { id: crypto.randomUUID(), name: '', url: '' }] });
+  const removeUrlRow = (id: string) =>
+    onChange({ ...form, externalUrls: form.externalUrls.filter((l) => l.id !== id) });
+  const setUrlRow = (id: string, patch: Partial<ExternalLink>) =>
+    onChange({ ...form, externalUrls: form.externalUrls.map((l) => (l.id === id ? { ...l, ...patch } : l)) });
+
+  const isDotnet = form.type === 'dotnet';
+  const pathHint = isDotnet ? 'Path to the .csproj file' : 'Project folder';
 
   return (
     <div className="pf-body">
@@ -170,46 +201,51 @@ function ProjectFormPanel({
       </div>
 
       <label className="pf-field">
-        <span>Path</span>
+        <span>Path <small>({pathHint})</small><PathInfoTip type={form.type} /></span>
         <div className="pf-row">
-          <input type="text" value={form.path} onChange={setStr('path')} placeholder="/path/to/project" />
+          <input
+            type="text"
+            value={form.path}
+            onChange={setStr('path')}
+            placeholder={isDotnet ? '/path/to/App.csproj' : '/path/to/project'}
+            className="pf-mono"
+          />
           <button type="button" className="btn ghost" onClick={onBrowse}>Browse…</button>
         </div>
+        <span className="pf-field-hint">
+          Profiles, ports, and build command are auto-detected from the project — nothing to type.
+        </span>
       </label>
 
       <div className="pf-field">
-        <span>Protocol</span>
-        <div className="pf-protocol">
-          <label className="pf-protocol-opt">
-            <input type="radio" checked={!form.https} onChange={() => set('https', false)} />
-            HTTP
-          </label>
-          <label className="pf-protocol-opt">
-            <input type="radio" checked={form.https} onChange={() => set('https', true)} />
-            HTTPS
-          </label>
+        <div className="pf-env-header">
+          <span>External URLs <small>(hosted / staging links)</small></span>
+          <button type="button" className="btn ghost pf-env-add" onClick={addUrlRow}>+ Add</button>
+        </div>
+        <div className="pf-env-list">
+          {form.externalUrls.map((link) => (
+            <div key={link.id} className="pf-env-row">
+              <input
+                type="text"
+                value={link.name}
+                placeholder="Name (e.g. Production)"
+                onChange={(e) => setUrlRow(link.id, { name: e.target.value })}
+              />
+              <input
+                type="text"
+                value={link.url}
+                placeholder="https://my-app.example.com"
+                className="pf-mono"
+                onChange={(e) => setUrlRow(link.id, { url: e.target.value })}
+              />
+              <button type="button" className="pf-env-remove" onClick={() => removeUrlRow(link.id)}>✕</button>
+            </div>
+          ))}
+          {form.externalUrls.length === 0 && (
+            <span className="pf-env-empty">No external URLs</span>
+          )}
         </div>
       </div>
-
-      <label className="pf-field">
-        <span>Port</span>
-        <input type="number" value={form.port} onChange={setStr('port')} placeholder="e.g. 5001" min="1" max="65535" />
-      </label>
-
-      <label className="pf-field">
-        <span>External URL <small>(optional)</small></span>
-        <input type="text" value={form.externalUrl} onChange={setStr('externalUrl')} placeholder="e.g. https://myapp.ngrok.io" />
-      </label>
-
-      <label className="pf-field">
-        <span>Run command</span>
-        <input type="text" value={form.runCommand} onChange={setStr('runCommand')} placeholder="e.g. dotnet run --launch-profile Development" className="pf-mono" />
-      </label>
-
-      <label className="pf-field">
-        <span>Build command <small>(optional)</small></span>
-        <input type="text" value={form.buildCommand} onChange={setStr('buildCommand')} placeholder="e.g. dotnet build" className="pf-mono" />
-      </label>
 
       <div className="pf-field">
         <div className="pf-env-header">
@@ -246,165 +282,6 @@ function ProjectFormPanel({
   );
 }
 
-// ─── Profile panel ───────────────────────────────────────────────────────────
-
-type ProfileForm = { name: string; runCommand: string; port: string; https: boolean; externalUrl: string };
-const EMPTY_PROFILE_FORM: ProfileForm = { name: '', runCommand: '', port: '', https: false, externalUrl: '' };
-
-function ProfilesPanel({ projectId, projectRunCommand }: { projectId: string; projectRunCommand: string }) {
-  const [list, setList] = useState<RunProfile[]>([]);
-  const [adding, setAdding] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<ProfileForm>(EMPTY_PROFILE_FORM);
-
-  const load = useCallback(async () => {
-    setList(await window.launcher.listProfiles(projectId));
-  }, [projectId]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const startAdd = () => {
-    setForm({ ...EMPTY_PROFILE_FORM, runCommand: projectRunCommand });
-    setAdding(true);
-    setEditingId(null);
-  };
-
-  const startEdit = (p: RunProfile) => {
-    setForm({ name: p.name, runCommand: p.runCommand, port: p.port != null ? String(p.port) : '', https: p.https, externalUrl: p.externalUrl ?? '' });
-    setEditingId(p.id);
-    setAdding(false);
-  };
-
-  const save = async () => {
-    if (!form.name.trim() || !form.runCommand.trim()) return;
-    const port = form.port ? parseInt(form.port, 10) : null;
-    const externalUrl = form.externalUrl.trim() || null;
-    if (editingId) {
-      await window.launcher.updateProfile(editingId, {
-        name: form.name.trim(), runCommand: form.runCommand.trim(), port, https: form.https, externalUrl,
-      });
-    } else {
-      const input: RunProfileCreateInput = {
-        projectId, name: form.name.trim(), runCommand: form.runCommand.trim(), port, https: form.https, externalUrl,
-      };
-      await window.launcher.createProfile(input);
-    }
-    setAdding(false);
-    setEditingId(null);
-    load();
-  };
-
-  const cancel = () => { setAdding(false); setEditingId(null); };
-
-  const del = async (id: string) => {
-    if (!confirm('Delete this profile?')) return;
-    await window.launcher.deleteProfile(id);
-    load();
-  };
-
-  const showForm = adding || editingId !== null;
-
-  return (
-    <div className="pf-profiles-section">
-      <div className="pf-profiles-header">
-        <span>Run Profiles</span>
-        {!showForm && (
-          <button type="button" className="btn ghost pf-env-add" onClick={startAdd}>+ Add</button>
-        )}
-      </div>
-
-      {list.length === 0 && !showForm && (
-        <span className="pf-env-empty">No profiles — Default run command is used</span>
-      )}
-
-      {list.map((p) => (
-        editingId === p.id ? (
-          <ProfileInlineForm key={p.id} form={form} onChange={setForm} onSave={save} onCancel={cancel} />
-        ) : (
-          <div key={p.id} className="pf-profile-row">
-            <div className="pf-profile-info">
-              <span className="pf-profile-name">{p.name}</span>
-              <span className="pf-profile-proto">{p.https ? 'https' : 'http'}</span>
-              {p.port != null && <span className="pf-profile-port">:{p.port}</span>}
-              <span className="pf-profile-cmd pf-mono" title={p.runCommand}>{p.runCommand}</span>
-            </div>
-            <div className="pf-profile-btns">
-              <button type="button" className="btn ghost" onClick={() => startEdit(p)} title="Edit">✎</button>
-              <button type="button" className="btn ghost wm-project-del" onClick={() => del(p.id)} title="Delete">✕</button>
-            </div>
-          </div>
-        )
-      ))}
-
-      {adding && (
-        <ProfileInlineForm form={form} onChange={setForm} onSave={save} onCancel={cancel} />
-      )}
-    </div>
-  );
-}
-
-function ProfileInlineForm({
-  form, onChange, onSave, onCancel,
-}: {
-  form: ProfileForm;
-  onChange: (f: ProfileForm) => void;
-  onSave: () => void;
-  onCancel: () => void;
-}) {
-  const setStr = (k: keyof ProfileForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    onChange({ ...form, [k]: e.target.value });
-  return (
-    <div className="pf-profile-form">
-      <input
-        type="text"
-        placeholder="Profile name (e.g. Staging)"
-        value={form.name}
-        autoFocus
-        onChange={setStr('name')}
-        onKeyDown={(e) => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel(); }}
-      />
-      <input
-        type="text"
-        placeholder="Run command"
-        value={form.runCommand}
-        className="pf-mono"
-        onChange={setStr('runCommand')}
-        onKeyDown={(e) => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel(); }}
-      />
-      <div className="pf-protocol">
-        <label className="pf-protocol-opt">
-          <input type="radio" checked={!form.https} onChange={() => onChange({ ...form, https: false })} />
-          HTTP
-        </label>
-        <label className="pf-protocol-opt">
-          <input type="radio" checked={form.https} onChange={() => onChange({ ...form, https: true })} />
-          HTTPS
-        </label>
-      </div>
-      <input
-        type="number"
-        placeholder="Port (optional)"
-        value={form.port}
-        min="1"
-        max="65535"
-        onChange={setStr('port')}
-        onKeyDown={(e) => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel(); }}
-      />
-      <input
-        type="text"
-        placeholder="External URL (optional)"
-        value={form.externalUrl}
-        onChange={setStr('externalUrl')}
-        onKeyDown={(e) => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel(); }}
-      />
-      <div className="pf-profile-form-actions">
-        <button type="button" className="btn ghost" onClick={onCancel}>Cancel</button>
-        <button type="button" className="btn primary" onClick={onSave}
-          disabled={!form.name.trim() || !form.runCommand.trim()}>Save</button>
-      </div>
-    </div>
-  );
-}
 
 // ─── Main WorkspaceManager ────────────────────────────────────────────────────
 
@@ -448,13 +325,6 @@ export default function WorkspaceManager({ open, onClose, onChanged }: Props) {
     setError(null);
   }, [open, load]);
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [open, onClose]);
-
   if (!open) return null;
 
   const selectedWs = workspaces.find((w) => w.id === selectedWsId);
@@ -489,10 +359,9 @@ export default function WorkspaceManager({ open, onClose, onChanged }: Props) {
 
   // ── Project actions ─────────────────────────────────────────────────────────
 
-  const startCreateProject = async () => {
+  const startCreateProject = () => {
     if (!selectedWsId) return;
-    const defaults = await window.launcher.getProjectTypeDefaults('dotnet');
-    setProjectForm({ ...EMPTY_FORM, runCommand: defaults.runCommand });
+    setProjectForm({ ...EMPTY_FORM });
     setCategoryTab('backend');
     setEditingProject({ mode: 'create' });
     setError(null);
@@ -505,28 +374,28 @@ export default function WorkspaceManager({ open, onClose, onChanged }: Props) {
     setError(null);
   };
 
-  const handleTypeChange = async (type: ProjectType) => {
-    const defaults = await window.launcher.getProjectTypeDefaults(type);
-    setProjectForm((f) => ({
-      ...f,
-      type,
-      runCommand: f.runCommand === '' || !f.runCommand ? defaults.runCommand : f.runCommand,
-      port: f.port === '' && defaults.port != null ? String(defaults.port) : f.port,
-    }));
+  const handleTypeChange = (type: ProjectType) => {
+    setProjectForm((f) => ({ ...f, type }));
   };
 
   const browseProjectPath = async () => {
-    const picked = await window.launcher.pickDirectory({
-      defaultPath: projectForm.path || undefined,
-      title: 'Select project folder',
-    });
+    const picked =
+      projectForm.type === 'dotnet'
+        ? await window.launcher.mobilePickFile({
+            defaultPath: projectForm.path || undefined,
+            title: 'Select the .csproj file',
+            filters: [{ name: 'C# project', extensions: ['csproj'] }],
+          })
+        : await window.launcher.pickDirectory({
+            defaultPath: projectForm.path || undefined,
+            title: 'Select project folder',
+          });
     if (picked) setProjectForm((f) => ({ ...f, path: picked }));
   };
 
   const saveProject = async () => {
     if (!projectForm.name.trim()) { setError('Name is required'); return; }
     if (!projectForm.path.trim()) { setError('Path is required'); return; }
-    if (!projectForm.runCommand.trim()) { setError('Run command is required'); return; }
     if (!selectedWsId) return;
 
     setSaving(true);
@@ -560,7 +429,6 @@ export default function WorkspaceManager({ open, onClose, onChanged }: Props) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="wm-title"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="wm-dialog">
         <header className="settings-header">
@@ -679,13 +547,6 @@ export default function WorkspaceManager({ open, onClose, onChanged }: Props) {
                       onBrowse={browseProjectPath}
                       onTypeChange={handleTypeChange}
                     />
-
-                    {editingProject.mode === 'edit' && (
-                      <ProfilesPanel
-                        projectId={editingProject.project.id}
-                        projectRunCommand={projectForm.runCommand}
-                      />
-                    )}
 
                     {error && <div className="wm-error">{error}</div>}
 

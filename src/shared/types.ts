@@ -77,23 +77,46 @@ export type WorkspaceConfig = {
   createdAt: number;
 };
 
+/** A named external/hosted link shown in a service column. */
+export type ExternalLink = { id: string; name: string; url: string };
+
 export type ProjectConfig = {
   id: string;
   workspaceId: string;
   name: string;
   type: ProjectType;
   category: ProjectCategory;
-  path: string;             // absolute path (CWD for spawning)
-  port: number | null;
-  https: boolean;
-  externalUrl: string | null;
+  path: string;             // absolute path (CWD for spawning; .csproj for C#)
+  port: number | null;      // legacy; backend ports are now detected per profile
+  https: boolean;           // legacy; backend protocol is derived from detected URLs
+  externalUrl: string | null; // legacy single link (migrated into externalUrls)
+  externalUrls: ExternalLink[];
   tags: string[];
   env: Record<string, string>;
-  runCommand: string;       // shell command; overrideable by user
+  runCommand: string;       // legacy; backend run comes from detected profiles
   buildCommand: string | null;
   position: number;
   createdAt: number;
 };
+
+// ─── Backend/web auto-detection ───────────────────────────────────────────────
+
+/** A runnable profile/environment auto-detected from a backend project. */
+export type BackendProfile = {
+  name: string;
+  runCommand: string;                 // raw command (finalized at run time)
+  detail?: string;                    // human-readable command shown in the dropdown (e.g. "next dev --port 3100")
+  urls: string[];                     // detected applicationUrls (scheme + port), may be empty
+  env: Record<string, string>;        // profile-declared env (e.g. C# launchSettings)
+};
+
+export type BackendDetection = {
+  profiles: BackendProfile[];
+  buildCommand: string | null;
+  warnings: string[];
+};
+
+export type BackendDetectArgs = { projectPath: string; type?: ProjectType };
 
 // ─── Run profiles ────────────────────────────────────────────────────────────
 
@@ -410,6 +433,7 @@ export type ProjectCreateInput = {
   port?: number | null;
   https?: boolean;
   externalUrl?: string | null;
+  externalUrls?: ExternalLink[];
   tags?: string[];
   env?: Record<string, string>;
   runCommand?: string;        // defaults to type's default if omitted
@@ -426,6 +450,7 @@ export type ProjectUpdateInput = Partial<{
   port: number | null;
   https: boolean;
   externalUrl: string | null;
+  externalUrls: ExternalLink[];
   tags: string[];
   env: Record<string, string>;
   runCommand: string;
@@ -514,7 +539,9 @@ export type LauncherApi = {
   saveFirebaseConfig: (projectId: string, input: FirebaseConfigInput) => Promise<FirebaseConfig>;
 
   // Service control (backend — keyed by project.path)
-  startService: (args: { projectPath: string; profileId?: string | null }) => Promise<StartResult>;
+  detectBackendProfiles: (args: BackendDetectArgs) => Promise<BackendDetection>;
+  startService: (args: { projectPath: string; profileName?: string | null }) => Promise<StartResult>;
+  buildService: (args: { projectPath: string; profileName?: string | null }) => Promise<MobileActionResult>;
   stopService: (args: { projectPath: string }) => Promise<StopResult>;
   killServicePort: (args: { projectPath: string; port: number | null }) => Promise<KillPortResult>;
   statusSnapshot: () => Promise<StatusSnapshot[]>;

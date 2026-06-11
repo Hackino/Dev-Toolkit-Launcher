@@ -6,6 +6,7 @@ import type {
   ProjectUpdateInput,
   ProjectType,
   ProjectCategory,
+  ExternalLink,
 } from '../../../shared/types';
 import { categoryOfType } from '../../../shared/category';
 
@@ -19,6 +20,7 @@ type ProjectRow = {
   port: number | null;
   https: number;
   external_url: string | null;
+  external_urls: string | null;
   tags: string;
   env: string;
   run_command: string;
@@ -26,6 +28,15 @@ type ProjectRow = {
   position: number;
   created_at: number;
 };
+
+function parseExternalUrls(row: ProjectRow): ExternalLink[] {
+  const list = JSON.parse(row.external_urls ?? '[]') as ExternalLink[];
+  // Back-compat: surface a legacy single external_url as one named link.
+  if (list.length === 0 && row.external_url) {
+    return [{ id: randomUUID(), name: 'External', url: row.external_url }];
+  }
+  return list;
+}
 
 function toConfig(row: ProjectRow): ProjectConfig {
   const type = row.type as ProjectType;
@@ -39,6 +50,7 @@ function toConfig(row: ProjectRow): ProjectConfig {
     port: row.port,
     https: Boolean(row.https),
     externalUrl: row.external_url,
+    externalUrls: parseExternalUrls(row),
     tags: JSON.parse(row.tags ?? '[]') as string[],
     env: JSON.parse(row.env) as Record<string, string>,
     runCommand: row.run_command,
@@ -89,10 +101,11 @@ export const ProjectRepository = {
     const category = input.category ?? categoryOfType(input.type);
     const runCommand = input.runCommand ?? '';
     const port = input.port ?? null;
+    const externalUrls = JSON.stringify(input.externalUrls ?? []);
 
     db.prepare(`
-      INSERT INTO projects (id, workspace_id, name, type, category, path, port, https, external_url, tags, env, run_command, build_command, position, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO projects (id, workspace_id, name, type, category, path, port, https, external_url, external_urls, tags, env, run_command, build_command, position, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       input.workspaceId,
@@ -103,6 +116,7 @@ export const ProjectRepository = {
       port,
       input.https ? 1 : 0,
       input.externalUrl ?? null,
+      externalUrls,
       JSON.stringify(input.tags ?? []),
       JSON.stringify(input.env ?? {}),
       runCommand,
@@ -121,6 +135,7 @@ export const ProjectRepository = {
       port,
       https: input.https ? 1 : 0,
       external_url: input.externalUrl ?? null,
+      external_urls: externalUrls,
       tags: JSON.stringify(input.tags ?? []),
       env: JSON.stringify(input.env ?? {}),
       run_command: runCommand,
@@ -145,6 +160,7 @@ export const ProjectRepository = {
     if (input.port !== undefined) { fields.push('port = ?'); values.push(input.port); }
     if (input.https !== undefined) { fields.push('https = ?'); values.push(input.https ? 1 : 0); }
     if (input.externalUrl !== undefined) { fields.push('external_url = ?'); values.push(input.externalUrl); }
+    if (input.externalUrls !== undefined) { fields.push('external_urls = ?'); values.push(JSON.stringify(input.externalUrls)); }
     if (input.tags !== undefined) { fields.push('tags = ?'); values.push(JSON.stringify(input.tags)); }
     if (input.env !== undefined) { fields.push('env = ?'); values.push(JSON.stringify(input.env)); }
     if (input.runCommand !== undefined) { fields.push('run_command = ?'); values.push(input.runCommand); }

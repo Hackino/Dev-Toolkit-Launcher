@@ -8,9 +8,11 @@ export const ktorFeature: LanguageFeature = {
   defaults: { runCommand: './gradlew run', port: 8080 },
   resolveRunCommand(projectPath, runCommand) {
     if (process.platform !== 'win32') {
-      const gradlew = join(projectPath, 'gradlew');
-      if (existsSync(gradlew)) {
-        try { chmodSync(gradlew, 0o755); } catch { /* ignore */ }
+      for (const wrapper of ['gradlew', 'mvnw']) {
+        const p = join(projectPath, wrapper);
+        if (existsSync(p)) {
+          try { chmodSync(p, 0o755); } catch { /* ignore */ }
+        }
       }
     }
     return runCommand;

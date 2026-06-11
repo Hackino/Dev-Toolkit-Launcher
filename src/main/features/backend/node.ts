@@ -3,7 +3,11 @@ import { join } from 'node:path';
 import type { ProjectType } from '../../../shared/types';
 import type { LanguageFeature } from '../../core/ports';
 
-const INSTALL_CMD = 'npm install --no-audit --no-fund --prefer-offline';
+// NOTE: no `--prefer-offline`. That flag makes npm resolve against cached
+// package metadata and skip revalidation, so a transitive dependency version
+// published after the local cache was last refreshed fails with ETARGET even
+// though it exists on the registry. npm still reuses cached tarballs without it.
+const INSTALL_CMD = 'npm install --no-audit --no-fund';
 
 function needsInstall(projectPath: string): boolean {
   const nodeModules = join(projectPath, 'node_modules');

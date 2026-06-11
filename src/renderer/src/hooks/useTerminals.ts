@@ -16,6 +16,7 @@ type TermEntry = {
   term: Terminal;
   fit: FitAddon;
   container: HTMLDivElement;
+  opened: boolean;   // xterm.open() must run while the container is in the DOM
 };
 
 // Terminal ANSI color codes
@@ -58,7 +59,8 @@ function makeTerm(): TermEntry {
   });
   const fit = new FitAddon();
   term.loadAddon(fit);
-  term.open(container);
+  // NOTE: term.open() is deferred to attachActive — opening on a detached
+  // element produces a broken viewport (no scrollbar, erratic wheel scroll).
 
   term.attachCustomKeyEventHandler((event) => {
     if (event.type !== 'keydown') return true;
@@ -82,12 +84,13 @@ function makeTerm(): TermEntry {
     if (sel) navigator.clipboard.writeText(sel).catch(() => undefined);
   });
 
-  return { term, fit, container };
+  return { term, fit, container, opened: false };
 }
 
 export function useTerminals() {
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [activeIdx, setActiveIdx] = useState<number>(-1);
+  const [activeTerm, setActiveTerm] = useState<Terminal | null>(null);
   const termsRef = useRef<Map<string, TermEntry>>(new Map());
   const tabsRef = useRef<TerminalTab[]>([]);
   tabsRef.current = tabs;
@@ -211,15 +214,31 @@ export function useTerminals() {
 
   const attachActive = useCallback((mount: HTMLDivElement | null) => {
     if (!mount) return;
+    const active = activeIdx >= 0 ? tabsRef.current[activeIdx] : null;
+    const entry = active ? termsRef.current.get(active.projectPath) ?? null : null;
+
+    // Idempotent: if the correct terminal is already mounted, do nothing. This
+    // matters because the effect can re-run on unrelated re-renders — re-appending
+    // the xterm node would reset the scroll position (breaking scrolling).
+    if (entry && mount.firstChild === entry.container) return;
+
     while (mount.firstChild) mount.removeChild(mount.firstChild);
-    if (activeIdx < 0) return;
-    const active = tabsRef.current[activeIdx];
-    if (!active) return;
-    const entry = termsRef.current.get(active.projectPath);
-    if (!entry) return;
+    if (!entry) { setActiveTerm(null); return; }
+
     mount.appendChild(entry.container);
+    setActiveTerm(entry.term);
+    // Open xterm only now that the container is in the DOM (with real dimensions),
+    // so the viewport and wheel scrolling work correctly.
+    if (!entry.opened) {
+      entry.term.open(entry.container);
+      entry.opened = true;
+    }
     requestAnimationFrame(() => {
-      try { entry.fit.fit(); } catch { /* no-op */ }
+      try {
+        entry.fit.fit();
+        entry.term.refresh(0, entry.term.rows - 1);
+        entry.term.scrollToBottom();
+      } catch { /* no-op */ }
     });
   }, [activeIdx]);
 
@@ -236,7 +255,7 @@ export function useTerminals() {
     return () => window.removeEventListener('resize', handler);
   }, [activeIdx]);
 
-  return { tabs, activeIdx, setActiveIdx, openOrFocus, openTerminal, close, writeLine, attachActive };
+  return { tabs, activeIdx, activeTerm, setActiveIdx, openOrFocus, openTerminal, close, writeLine, attachActive };
 }
 
 export type TerminalsApi = ReturnType<typeof useTerminals>;

@@ -51,11 +51,13 @@ function makeLineSplitter(onLine: (line: string) => void) {
 }
 
 export async function startService(args: {
-  projectPath: string;
+  projectPath: string;          // service identity / terminal key
   port: number | null;
   runCommand: string;
   env: Record<string, string>;
+  cwd?: string;                 // spawn working dir (defaults to projectPath; differs for C# .csproj)
 }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const cwd = args.cwd ?? args.projectPath;
   const existing = services.get(args.projectPath);
   if (existing?.status === 'running') return { ok: false, error: 'already running — stop first' };
   if (existing?.status === 'starting') return { ok: false, error: 'already starting' };
@@ -81,12 +83,12 @@ export async function startService(args: {
     }
   }
 
-  emitLog(args.projectPath, 'launcher', `${args.runCommand}    (cwd: ${args.projectPath})`);
+  emitLog(args.projectPath, 'launcher', `${args.runCommand}    (cwd: ${cwd})`);
 
   let child: ChildProcess;
   try {
     child = spawn(args.runCommand, [], {
-      cwd: args.projectPath,
+      cwd,
       shell: true,
       env: { ...process.env, ...args.env },
       windowsHide: true,

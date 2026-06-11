@@ -146,6 +146,12 @@ function runMigrations(db: Database.Database) {
         CREATE INDEX idx_build_history_project ON mobile_build_history(project_id);
       `,
     },
+    {
+      version: 7,
+      sql: `
+        ALTER TABLE projects ADD COLUMN external_urls TEXT NOT NULL DEFAULT '[]';
+      `,
+    },
   ];
 
   const insertMigration = db.prepare(

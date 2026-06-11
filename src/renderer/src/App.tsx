@@ -6,6 +6,8 @@ import { useWorkspaces } from './hooks/useWorkspaces';
 import { useTerminals } from './hooks/useTerminals';
 import { useDevices } from './hooks/useDevices';
 import { useMobile } from './hooks/useMobile';
+import { useBackendProfiles } from './hooks/useBackendProfiles';
+import { portOfUrl } from './features/backend/urlUtils';
 import ServiceColumn from './ui/ServiceColumn';
 import MobileServiceColumn from './ui/MobileServiceColumn';
 import TerminalDock from './ui/TerminalDock';
@@ -18,7 +20,6 @@ export default function App() {
   const {
     workspaces,
     projects,
-    profiles,
     activeWorkspace,
     activeWorkspaceId,
     activeProjects,
@@ -32,6 +33,7 @@ export default function App() {
   const allProjectsList = Object.values(projects).flat();
   const deviceMap = useDevices(allProjectsList);
   const mobileData = useMobile(allProjectsList);
+  const { detections } = useBackendProfiles(allProjectsList);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [managerOpen, setManagerOpen] = useState(false);
   const [selectedProfiles, setSelectedProfiles] = useState<Record<string, string | null>>({});
@@ -40,19 +42,39 @@ export default function App() {
   useEffect(() => { refreshStatus(); }, [refreshStatus]);
   useEffect(() => { window.launcher.getLocalIp().then(setLocalIp); }, []);
 
+  // Resolve the active detected profile for a backend project.
+  const activeProfileOf = (project: ProjectConfig) => {
+    const det = detections[project.path];
+    const name = selectedProfiles[project.id] ?? null;
+    return (name ? det?.profiles.find((p) => p.name === name) : null) ?? det?.profiles[0] ?? null;
+  };
+
   const handleStart = async (project: ProjectConfig) => {
-    const profileId = selectedProfiles[project.id] ?? null;
-    const profile = profileId
-      ? (profiles[project.id] ?? []).find((p) => p.id === profileId) ?? null
-      : null;
+    const profile = activeProfileOf(project);
     setBusy((b) => ({ ...b, [project.path]: true }));
-    terminals.openOrFocus(project, profile);
-    const result = await window.launcher.startService({ projectPath: project.path, profileId });
+    terminals.openOrFocus(project, null);
+    const result = await window.launcher.startService({
+      projectPath: project.path,
+      profileName: profile?.name ?? null,
+    });
     if (!result.ok) {
-      terminals.writeLine(project.path, 'launcher', `start failed: ${result.error}`);
+      terminals.writeLine(project.path, 'stderr', `✖ start failed: ${result.error}`);
     }
     setBusy((b) => ({ ...b, [project.path]: false }));
     refreshStatus();
+  };
+
+  const handleBuild = async (project: ProjectConfig) => {
+    const profile = activeProfileOf(project);
+    const buildKey = `${project.path}::build`;
+    terminals.openTerminal(buildKey, `${project.name} · build`);
+    const result = await window.launcher.buildService({
+      projectPath: project.path,
+      profileName: profile?.name ?? null,
+    });
+    if (!result.ok) {
+      terminals.writeLine(buildKey, 'stderr', `✖ build failed: ${result.error}`);
+    }
   };
 
   const handleStop = async (project: ProjectConfig) => {
@@ -60,20 +82,17 @@ export default function App() {
     terminals.writeLine(project.path, 'launcher', 'Stop requested…');
     const result = await window.launcher.stopService({ projectPath: project.path });
     if (!result.ok) {
-      terminals.writeLine(project.path, 'launcher', `stop failed: ${result.error}`);
+      terminals.writeLine(project.path, 'stderr', `✖ stop failed: ${result.error}`);
     }
     setBusy((b) => ({ ...b, [project.path]: false }));
     refreshStatus();
   };
 
   const handleKillPort = async (project: ProjectConfig) => {
-    const profileId = selectedProfiles[project.id] ?? null;
-    const profile = profileId
-      ? (profiles[project.id] ?? []).find((p) => p.id === profileId) ?? null
-      : null;
-    const port = profile?.port ?? project.port;
+    const profile = activeProfileOf(project);
+    const port = profile?.urls[0] ? portOfUrl(profile.urls[0]) : null;
     setBusy((b) => ({ ...b, [project.path]: true }));
-    terminals.openOrFocus(project, profile);
+    terminals.openOrFocus(project, null);
     terminals.writeLine(
       project.path,
       'launcher',
@@ -81,7 +100,7 @@ export default function App() {
     );
     const result = await window.launcher.killServicePort({ projectPath: project.path, port });
     if (!result.ok) {
-      terminals.writeLine(project.path, 'launcher', `kill-port failed: ${result.error}`);
+      terminals.writeLine(project.path, 'stderr', `✖ kill-port failed: ${result.error}`);
     }
     setBusy((b) => ({ ...b, [project.path]: false }));
     refreshStatus();
@@ -201,13 +220,14 @@ export default function App() {
                       project={project as BackendProjectConfig}
                       status={statusOf(project)}
                       busy={!!busy[project.path]}
-                      profiles={profiles[project.id] ?? []}
-                      selectedProfileId={selectedProfiles[project.id] ?? null}
-                      onSelectProfile={(id) =>
-                        setSelectedProfiles((prev) => ({ ...prev, [project.id]: id }))
+                      detection={detections[project.path] ?? null}
+                      selectedProfileName={selectedProfiles[project.id] ?? null}
+                      onSelectProfile={(name) =>
+                        setSelectedProfiles((prev) => ({ ...prev, [project.id]: name }))
                       }
                       localIp={localIp}
                       onRun={() => handleStart(project)}
+                      onBuild={() => handleBuild(project)}
                       onStop={() => handleStop(project)}
                       onKillPort={() => handleKillPort(project)}
                     />
