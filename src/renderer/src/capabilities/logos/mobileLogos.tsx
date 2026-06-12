@@ -1,5 +1,19 @@
 import type { MobilePlatform } from '../../../../shared/types';
 
+/** Official-style multicolor Firebase flame mark. */
+export function FirebaseLogo({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Firebase">
+      {/* base fold (medium amber) */}
+      <path d="M20.684 19.365l-2.25-14a.542.542 0 00-.919-.295L3.316 19.365l7.856 4.427a1.621 1.621 0 001.588 0z" fill="#FFA000" />
+      {/* tall left facet (light) */}
+      <path d="M3.89 15.673L6.255.461A.542.542 0 017.27.288l2.543 4.771z" fill="#FFCA28" />
+      {/* middle crease (dark orange) */}
+      <path d="M14.3 7.147l-1.82-3.482a.542.542 0 00-.96 0L3.53 17.984z" fill="#F57C00" />
+    </svg>
+  );
+}
+
 export function AndroidLogo({ size = 24 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

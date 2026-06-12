@@ -29,9 +29,9 @@ const PROJECT_TYPES = (Object.keys(PROJECT_TYPE_LABELS) as ProjectType[]).filter
 type PathGuide = { target: string; example: string; note?: string };
 const PATH_GUIDE: Record<string, PathGuide> = {
   'dotnet': {
-    target: 'The .csproj project file (not the solution).',
-    example: '~/apps/MyApi/MyApi.csproj',
-    note: 'Profiles are read from Properties/launchSettings.json next to it.',
+    target: 'The project root folder (the .csproj is auto-detected). You can also point at the .csproj directly.',
+    example: '~/apps/MyApi   (finds MyApi.csproj inside)',
+    note: 'Profiles + ports are read from Properties/launchSettings.json.',
   },
   'spring-boot': {
     target: 'The project root — the folder containing build.gradle / pom.xml.',
@@ -166,7 +166,7 @@ function ProjectFormPanel({
     onChange({ ...form, externalUrls: form.externalUrls.map((l) => (l.id === id ? { ...l, ...patch } : l)) });
 
   const isDotnet = form.type === 'dotnet';
-  const pathHint = isDotnet ? 'Path to the .csproj file' : 'Project folder';
+  const pathHint = isDotnet ? 'Project root — .csproj auto-detected' : 'Project folder';
 
   return (
     <div className="pf-body">
@@ -207,7 +207,7 @@ function ProjectFormPanel({
             type="text"
             value={form.path}
             onChange={setStr('path')}
-            placeholder={isDotnet ? '/path/to/App.csproj' : '/path/to/project'}
+            placeholder={isDotnet ? '/path/to/MyApi' : '/path/to/project'}
             className="pf-mono"
           />
           <button type="button" className="btn ghost" onClick={onBrowse}>Browse…</button>
@@ -299,6 +299,11 @@ export default function WorkspaceManager({ open, onClose, onChanged }: Props) {
   const [categoryTab, setCategoryTab] = useState<ProjectCategory>('backend');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Drag-and-drop reordering
+  const [dragWs, setDragWs] = useState<number | null>(null);
+  const [overWs, setOverWs] = useState<number | null>(null);
+  const [dragProj, setDragProj] = useState<number | null>(null);
+  const [overProj, setOverProj] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     const wsList = await window.launcher.listWorkspaces();
@@ -379,17 +384,12 @@ export default function WorkspaceManager({ open, onClose, onChanged }: Props) {
   };
 
   const browseProjectPath = async () => {
-    const picked =
-      projectForm.type === 'dotnet'
-        ? await window.launcher.mobilePickFile({
-            defaultPath: projectForm.path || undefined,
-            title: 'Select the .csproj file',
-            filters: [{ name: 'C# project', extensions: ['csproj'] }],
-          })
-        : await window.launcher.pickDirectory({
-            defaultPath: projectForm.path || undefined,
-            title: 'Select project folder',
-          });
+    // All backend types take a project root folder. For C# the .csproj (and its
+    // launchSettings) are auto-detected inside; a specific .csproj can still be typed.
+    const picked = await window.launcher.pickDirectory({
+      defaultPath: projectForm.path || undefined,
+      title: 'Select project folder',
+    });
     if (picked) setProjectForm((f) => ({ ...f, path: picked }));
   };
 
@@ -414,6 +414,25 @@ export default function WorkspaceManager({ open, onClose, onChanged }: Props) {
     } finally {
       setSaving(false);
     }
+  };
+
+  // ── Drag-and-drop reorder ────────────────────────────────────────────────────
+  const reorderWorkspaces = (from: number, to: number) => {
+    if (from === to) return;
+    const next = [...workspaces];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setWorkspaces(next);
+    void window.launcher.reorderWorkspaces(next.map((w) => w.id)).then(() => onChanged());
+  };
+
+  const reorderProjectsInWs = (from: number, to: number) => {
+    if (from === to || !selectedWsId) return;
+    const next = [...selectedProjects];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setProjects((prev) => ({ ...prev, [selectedWsId]: next }));
+    void window.launcher.reorderProjects(selectedWsId, next.map((p) => p.id)).then(() => onChanged());
   };
 
   const deleteProject = async (p: ProjectConfig) => {
@@ -442,10 +461,15 @@ export default function WorkspaceManager({ open, onClose, onChanged }: Props) {
             <div className="wm-sidebar-header">Workspaces</div>
 
             <ul className="wm-ws-list">
-              {workspaces.map((ws) => (
+              {workspaces.map((ws, i) => (
                 <li
                   key={ws.id}
-                  className={`wm-ws-item ${selectedWsId === ws.id ? 'active' : ''}`}
+                  className={`wm-ws-item ${selectedWsId === ws.id ? 'active' : ''} ${overWs === i && dragWs !== i ? 'wm-drag-over' : ''} ${dragWs === i ? 'wm-dragging' : ''}`}
+                  draggable={editingWsId !== ws.id}
+                  onDragStart={() => setDragWs(i)}
+                  onDragOver={(e) => { e.preventDefault(); setOverWs(i); }}
+                  onDrop={(e) => { e.preventDefault(); if (dragWs !== null) reorderWorkspaces(dragWs, i); setDragWs(null); setOverWs(null); }}
+                  onDragEnd={() => { setDragWs(null); setOverWs(null); }}
                   onClick={() => { setSelectedWsId(ws.id); setEditingProject(null); }}
                 >
                   {editingWsId === ws.id ? (
@@ -585,8 +609,17 @@ export default function WorkspaceManager({ open, onClose, onChanged }: Props) {
                   </div>
                 ) : (
                   <ul className="wm-project-list">
-                    {selectedProjects.map((p) => (
-                      <li key={p.id} className="wm-project-item">
+                    {selectedProjects.map((p, i) => (
+                      <li
+                        key={p.id}
+                        className={`wm-project-item ${overProj === i && dragProj !== i ? 'wm-drag-over' : ''} ${dragProj === i ? 'wm-dragging' : ''}`}
+                        draggable
+                        onDragStart={() => setDragProj(i)}
+                        onDragOver={(e) => { e.preventDefault(); setOverProj(i); }}
+                        onDrop={(e) => { e.preventDefault(); if (dragProj !== null) reorderProjectsInWs(dragProj, i); setDragProj(null); setOverProj(null); }}
+                        onDragEnd={() => { setDragProj(null); setOverProj(null); }}
+                      >
+                        <span className="wm-drag-grip" title="Drag to reorder">⠿</span>
                         {isMobileType(p.type) ? (
                           <span
                             className="wm-project-type-badge wm-project-badge--mobile"

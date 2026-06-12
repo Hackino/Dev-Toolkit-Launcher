@@ -15,7 +15,9 @@ const DEEP_TIMEOUT_MS = 90_000;
 
 export function readIfExists(path: string): string | null {
   try {
-    return existsSync(path) ? readFileSync(path, 'utf8') : null;
+    // Strip a leading UTF-8 BOM (Visual Studio etc. write configs with one) so
+    // JSON.parse / regex parsing of launchSettings, package.json, etc. doesn't fail.
+    return existsSync(path) ? readFileSync(path, 'utf8').replace(/^﻿/, '') : null;
   } catch {
     return null;
   }

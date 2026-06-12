@@ -120,9 +120,6 @@ export default function App() {
       <header className="app-header">
         <h1>Dev Launcher</h1>
         <div className="app-header-actions">
-          <button className="btn ghost" onClick={() => window.launcher.relaunch()} title="Restart the app">
-            ⟳ Reload
-          </button>
           <button
             className="btn ghost"
             onClick={() => setManagerOpen(true)}

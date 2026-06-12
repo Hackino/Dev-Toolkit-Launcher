@@ -8,7 +8,7 @@
  * done here — it stays in the feature's `resolveRunCommand`, applied at start time.
  */
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, basename } from 'node:path';
 import type { ProjectType, BackendProfile, BackendDetection } from '../../../shared/types';
 import { readIfExists } from './variantDetection';
 
@@ -22,17 +22,54 @@ function uniq<T>(xs: T[]): T[] {
 
 // ─── dotnet ─────────────────────────────────────────────────────────────────────
 
-function resolveCsproj(projectPath: string): string | null {
-  if (projectPath.endsWith('.csproj')) return existsSync(projectPath) ? projectPath : null;
+const CSPROJ_SKIP = new Set(['bin', 'obj', 'node_modules', '.git', '.vs', '.idea', 'packages']);
+
+/** Depth-limited search for the first .csproj under a directory. */
+function findCsprojShallow(dir: string, depth: number): string | null {
+  let entries: string[];
   try {
-    if (statSync(projectPath).isDirectory()) {
-      const hit = readdirSync(projectPath).find((f) => f.endsWith('.csproj'));
-      return hit ? join(projectPath, hit) : null;
-    }
+    entries = readdirSync(dir);
   } catch {
-    /* ignore */
+    return null;
+  }
+  const direct = entries.find((f) => f.endsWith('.csproj'));
+  if (direct) return join(dir, direct);
+  if (depth <= 0) return null;
+  for (const name of entries) {
+    if (CSPROJ_SKIP.has(name) || name.startsWith('.')) continue;
+    const full = join(dir, name);
+    try {
+      if (statSync(full).isDirectory()) {
+        const hit = findCsprojShallow(full, depth - 1);
+        if (hit) return hit;
+      }
+    } catch {
+      /* ignore */
+    }
   }
   return null;
+}
+
+/**
+ * Resolve the .csproj for a given path. Accepts either the .csproj file directly
+ * or a project **root folder** (the .csproj — and its Properties/launchSettings.json
+ * — are auto-detected). Prefers a csproj matching the folder name, then any direct
+ * child, then a shallow recursive search.
+ */
+function resolveCsproj(projectPath: string): string | null {
+  if (projectPath.endsWith('.csproj')) return existsSync(projectPath) ? projectPath : null;
+  let isDir = false;
+  try {
+    isDir = statSync(projectPath).isDirectory();
+  } catch {
+    return null;
+  }
+  if (!isDir) return null;
+
+  const named = join(projectPath, `${basename(projectPath)}.csproj`);
+  if (existsSync(named)) return named;
+
+  return findCsprojShallow(projectPath, 2);
 }
 
 function detectDotnet(projectPath: string): BackendDetection {

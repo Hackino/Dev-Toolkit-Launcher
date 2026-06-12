@@ -88,7 +88,7 @@ function resolveAbs(projectPath: string, p: string): string {
 
 export function validateFirebaseJson(absPath: string): AssetValidation {
   try {
-    const raw = readFileSync(absPath, 'utf8');
+    const raw = readFileSync(absPath, 'utf8').replace(/^﻿/, ''); // tolerate UTF-8 BOM
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const projectInfo = parsed.project_info as Record<string, unknown> | undefined;
     const clients = parsed.client as unknown[] | undefined;
@@ -105,7 +105,7 @@ export function validateFirebaseJson(absPath: string): AssetValidation {
 
 export function validateFirebasePlist(absPath: string): AssetValidation {
   try {
-    const raw = readFileSync(absPath, 'utf8');
+    const raw = readFileSync(absPath, 'utf8').replace(/^﻿/, ''); // tolerate UTF-8 BOM
     if (!raw.includes('<plist') && !raw.includes('bplist')) {
       return { valid: false, error: 'Not a property-list file.' };
     }

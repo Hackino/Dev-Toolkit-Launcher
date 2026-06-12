@@ -1859,8 +1859,32 @@ html, body, #root { background: var(--backdrop); background-attachment: fixed; }
   background: transparent;
   gap: 0;
   padding: 10px 8px;
-  min-height: 0;   /* keep the 1fr row bounded so it scrolls instead of overflowing */
+  min-height: 0;            /* keep the 1fr row bounded */
+  overflow-y: hidden;       /* columns scroll their own content instead */
+  align-items: stretch;
+  grid-auto-rows: minmax(0, 1fr);   /* cap each column to the visible height */
 }
+
+/* Per-column internal scroll: identity header is pinned, the rest scrolls. */
+.column > :not(.column-scroll) { flex-shrink: 0; }
+.column-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* room so content doesn't sit under the scrollbar */
+  margin-right: -4px;
+  padding-right: 4px;
+}
+.column-scroll::-webkit-scrollbar { width: 8px; }
+.column-scroll::-webkit-scrollbar-thumb {
+  background: var(--glass-border-strong);
+  border-radius: 4px;
+}
+.column-scroll::-webkit-scrollbar-thumb:hover { background: var(--fg-muted); }
 
 .column {
   position: relative;
@@ -2321,3 +2345,26 @@ html, body, #root { background: var(--backdrop); background-attachment: fixed; }
   border: 6px solid transparent;
   border-top-color: var(--glass-border-strong);
 }
+
+/* ─── Drag-and-drop reordering (Manage Projects) ───────────────────────────── */
+.wm-ws-item[draggable="true"],
+.wm-project-item[draggable="true"] { cursor: grab; }
+.wm-ws-item.wm-dragging,
+.wm-project-item.wm-dragging { opacity: 0.4; }
+/* Insertion line where the item will drop */
+.wm-ws-item.wm-drag-over { box-shadow: inset 0 2px 0 0 var(--accent, #7c6cff); }
+.wm-project-item.wm-drag-over {
+  box-shadow: inset 0 2px 0 0 #7c6cff;
+  border-color: rgba(124, 108, 255, 0.5);
+}
+.wm-drag-grip {
+  flex-shrink: 0;
+  color: var(--fg-faint);
+  font-size: 13px;
+  line-height: 1;
+  cursor: grab;
+  user-select: none;
+  opacity: 0.5;
+  transition: opacity 120ms, color 120ms;
+}
+.wm-project-item:hover .wm-drag-grip { opacity: 1; color: var(--fg-muted); }

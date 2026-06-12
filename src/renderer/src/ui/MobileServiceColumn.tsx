@@ -10,7 +10,7 @@ import type {
   LogStream,
 } from '../../../shared/types';
 import { MOBILE_PLATFORM_LABELS } from '../../../shared/types';
-import { PlatformLogo } from '../capabilities/logos/mobileLogos';
+import { PlatformLogo, FirebaseLogo } from '../capabilities/logos/mobileLogos';
 import type { MobileColumnTarget, ColumnTargetKind } from '../features/mobileColumnTargets';
 import StatusBadge from './StatusBadge';
 
@@ -192,6 +192,7 @@ export default function MobileServiceColumn({
         </div>
       </header>
 
+      <div className="column-scroll">
       {/* Selectors row */}
       <div className="mobile-selectors">
         {/* Flutter entry point */}
@@ -287,29 +288,14 @@ export default function MobileServiceColumn({
       {/* Secondary actions row */}
       <div className="mobile-actions mobile-actions--row2">
         {kind === 'android' && (
-          <>
-            <ActionButton
-              label="📥 Install"
-              disabled={taskBusy || !selectedDeviceId || !lastBuild?.lastArtifactPath}
-              title={!selectedDeviceId ? 'Select a device first' : !lastBuild?.lastArtifactPath ? 'No artifact available' : 'Install APK on device'}
-              onClick={() => run(() =>
-                window.launcher.mobileInstallApk({ projectPath: project.path, deviceId: selectedDeviceId!, apkPath: lastBuild!.lastArtifactPath!, runKey })
-              )}
-            />
-            <ActionButton
-              label="🔬 Logcat"
-              disabled={taskBusy}
-              onClick={() => run(() => window.launcher.mobileViewLogs({ projectPath: project.path, deviceId: selectedDeviceId, runKey }))}
-            />
-            <ActionButton
-              label="💻 ADB Shell"
-              disabled={taskBusy || !selectedDeviceId}
-              title={!selectedDeviceId ? 'Select a device first' : 'Open ADB shell'}
-              onClick={() => run(() =>
-                window.launcher.mobileAdbShell({ projectPath: project.path, deviceId: selectedDeviceId!, command: 'getprop ro.product.model', runKey })
-              )}
-            />
-          </>
+          <ActionButton
+            label="📥 Install"
+            disabled={taskBusy || !selectedDeviceId || !lastBuild?.lastArtifactPath}
+            title={!selectedDeviceId ? 'Select a device first' : !lastBuild?.lastArtifactPath ? 'No artifact available' : 'Install APK on device'}
+            onClick={() => run(() =>
+              window.launcher.mobileInstallApk({ projectPath: project.path, deviceId: selectedDeviceId!, apkPath: lastBuild!.lastArtifactPath!, runKey })
+            )}
+          />
         )}
         {kind === 'ios' && (
           <ActionButton
@@ -324,12 +310,6 @@ export default function MobileServiceColumn({
             <ActionButton label="🩺 Doctor" disabled={taskBusy} onClick={() => run(() => window.launcher.mobileFlutterDoctor({ projectPath: project.path, runKey }))} />
           </>
         )}
-
-        <ActionButton
-          label="🖥 Open IDE"
-          disabled={taskBusy || iosBlocked}
-          onClick={() => run(() => window.launcher.mobileOpenIde({ projectPath: project.path, runKey }))}
-        />
 
         {isRunning && (
           <ActionButton
@@ -371,7 +351,7 @@ export default function MobileServiceColumn({
         (kind === 'ios' && fbIos?.enabled) ||
         (kind === 'desktop' && fbDesktop?.enabled)) && (
         <div className="mobile-firebase-row">
-          🔥
+          <FirebaseLogo size={13} />
           {kind === 'android' && fbAndroid?.enabled && <span className="mobile-fb-chip mobile-fb-chip--android">Android</span>}
           {kind === 'ios' && fbIos?.enabled && <span className="mobile-fb-chip mobile-fb-chip--ios">iOS</span>}
           {kind === 'desktop' && fbDesktop?.enabled && <span className="mobile-fb-chip mobile-fb-chip--android">Desktop</span>}
@@ -391,6 +371,7 @@ export default function MobileServiceColumn({
           {activeDevice.kind === 'emulator' ? '🖥' : '📱'} {activeDevice.name}
         </div>
       )}
+      </div>
     </section>
   );
 }

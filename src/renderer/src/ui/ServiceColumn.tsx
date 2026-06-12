@@ -87,13 +87,11 @@ export default function ServiceColumn({
           title="Run profile / environment"
         >
           {profiles.map((p) => {
-            const suffix = p.detail
-              ? ` — ${p.detail}`
-              : p.urls[0]
-                ? ` — ${portOf(normalizeUrl(p.urls[0])) ?? p.urls[0]}`
-                : '';
+            const port = p.urls[0] ? portOf(normalizeUrl(p.urls[0])) : null;
             return (
-              <option key={p.name} value={p.name}>{p.name}{suffix}</option>
+              <option key={p.name} value={p.name} title={p.detail ?? undefined}>
+                {p.name}{port != null ? ` — ${port}` : ''}
+              </option>
             );
           })}
         </select>
@@ -122,6 +120,7 @@ export default function ServiceColumn({
         <StatusBadge status={status.status} lastExitCode={status.lastExitCode} />
       </div>
 
+      <div className="column-scroll">
       {/* Detected application URLs */}
       {urls.length > 0 && (
         <div className="column-links">
@@ -172,6 +171,7 @@ export default function ServiceColumn({
           ))}
         </div>
       )}
+      </div>
     </section>
   );
 }
