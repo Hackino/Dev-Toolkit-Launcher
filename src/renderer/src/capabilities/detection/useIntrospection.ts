@@ -9,11 +9,13 @@ export function useIntrospection(projectPath: string, platform: MobilePlatform, 
   const [data, setData] = useState<MobileIntrospection | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const detect = useCallback(async () => {
-    if (!projectPath.trim()) return;
+  const detect = useCallback(async (): Promise<MobileIntrospection | null> => {
+    if (!projectPath.trim()) return null;
     setLoading(true);
     try {
-      setData(await window.launcher.mobileIntrospect({ projectPath, platform, module }));
+      const result = await window.launcher.mobileIntrospect({ projectPath, platform, module });
+      setData(result);
+      return result;
     } finally {
       setLoading(false);
     }

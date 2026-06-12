@@ -533,7 +533,7 @@ export function registerMobileIpc(): void {
       if (!platform) throw new Error('Platform is required to introspect.');
       return introspectProject(args.projectPath, platform, module || 'app');
     } catch (err) {
-      return { gradleModules: [], applicationIds: [], bundleIds: [], signingConfigs: [], warnings: [String(err)] };
+      return { gradleModules: [], applicationIds: [], bundleIds: [], signingConfigs: [], kmpTargets: [], warnings: [String(err)] };
     }
   });
 

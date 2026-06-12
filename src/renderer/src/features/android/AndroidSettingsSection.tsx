@@ -177,8 +177,8 @@ export function AndroidSettingsSection({
 
   const { data: introspect, loading: introspecting, detect } = useIntrospection(projectPath, platform, module);
 
-  const applySigningFromGradle = () => {
-    const sc = introspect?.signingConfigs.find((c) => /release/i.test(c.name)) ?? introspect?.signingConfigs[0];
+  const applySigningConfig = (name: string) => {
+    const sc = introspect?.signingConfigs.find((c) => c.name === name);
     if (!sc) return;
     onSigningChange({
       keystorePath: sc.storeFile ?? signing.keystorePath,
@@ -260,12 +260,22 @@ export function AndroidSettingsSection({
 
       <div className="mobile-subsection-header" style={{ marginTop: 16 }}>
         <span>Keystore / Signing</span>
-        {introspect && introspect.signingConfigs.length > 0 && (
-          <button type="button" className="variant-detect-btn" onClick={applySigningFromGradle} title="Fill from the project's signingConfigs">
-            ⚡ From build.gradle
-          </button>
-        )}
       </div>
+      {introspect && introspect.signingConfigs.length > 0 && (
+        <label className="pf-field">
+          <span>Detected signing config <small>(pick one to fill the fields below)</small></span>
+          <select
+            className="pf-mono"
+            defaultValue=""
+            onChange={(e) => { applySigningConfig(e.target.value); }}
+          >
+            <option value="" disabled>Select a detected signingConfig…</option>
+            {introspect.signingConfigs.map((sc) => (
+              <option key={sc.name} value={sc.name}>{sc.name}</option>
+            ))}
+          </select>
+        </label>
+      )}
       <FileDropField
         label="Keystore (.jks / .keystore)"
         value={signing.keystorePath ?? ''}

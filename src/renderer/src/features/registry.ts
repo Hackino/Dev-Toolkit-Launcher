@@ -14,10 +14,7 @@ export type MobileTabKey =
   | 'web'
   | 'flutter'
   | 'kmp'
-  | 'global'
-  | 'native'
-  | 'firebase'
-  | 'version';
+  | 'firebase';
 
 export const MOBILE_TAB_LABELS: Record<MobileTabKey, string> = {
   platform: 'Platform',
@@ -27,24 +24,20 @@ export const MOBILE_TAB_LABELS: Record<MobileTabKey, string> = {
   web: 'Web',
   flutter: 'Flutter',
   kmp: 'KMP',
-  global: 'Global Flags',
-  native: 'Native C++',
   firebase: 'Firebase',
-  version: 'Version',
 };
 
-/** The settings tabs each platform composes (the `version` tab is appended in edit mode). */
+/** The settings tabs each platform composes. */
 const MOBILE_TABS: Record<MobilePlatform, MobileTabKey[]> = {
-  'android': ['platform', 'android', 'native', 'firebase', 'global'],
-  'ios': ['platform', 'ios', 'firebase', 'global'],
-  'flutter': ['platform', 'flutter', 'android', 'ios', 'firebase', 'global'],
-  'react-native': ['platform', 'android', 'ios', 'firebase', 'global'],
-  'compose-multiplatform': ['platform', 'kmp', 'android', 'ios', 'desktop', 'web', 'native', 'firebase', 'global'],
+  'android': ['platform', 'android', 'firebase'],
+  'ios': ['platform', 'ios', 'firebase'],
+  'flutter': ['platform', 'flutter', 'android', 'ios', 'firebase'],
+  'react-native': ['platform', 'android', 'ios', 'firebase'],
+  'compose-multiplatform': ['platform', 'kmp', 'android', 'ios', 'desktop', 'web', 'firebase'],
 };
 
-export function mobileTabsFor(platform: MobilePlatform, isEdit: boolean): MobileTabKey[] {
-  const tabs = MOBILE_TABS[platform];
-  return isEdit ? [...tabs, 'version'] : tabs;
+export function mobileTabsFor(platform: MobilePlatform, _isEdit: boolean): MobileTabKey[] {
+  return MOBILE_TABS[platform];
 }
 
 /** Whether a platform shows the iOS Firebase row (iOS-capable platforms only). */

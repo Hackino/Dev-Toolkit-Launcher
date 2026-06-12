@@ -410,6 +410,7 @@ export type MobileIntrospection = {
   applicationIds: string[];
   bundleIds: string[];
   signingConfigs: SigningConfigInfo[];
+  kmpTargets: KmpTarget[];        // KMP build targets declared in the module's build.gradle.kts
   warnings: string[];
 };
 

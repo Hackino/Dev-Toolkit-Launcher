@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { BuildFlagEntry, BuildFlagKind } from '../../../../shared/types';
 
 export type FlagContext = 'android' | 'ios' | 'flutter' | 'global';
@@ -49,9 +50,10 @@ interface Props {
   context: FlagContext;
   label?: string;
   placeholder?: string;
+  info?: ReactNode;   // optional ⓘ tooltip rendered next to the label
 }
 
-export function BuildConfigEditor({ entries, onChange, context, label, placeholder }: Props) {
+export function BuildConfigEditor({ entries, onChange, context, label, placeholder, info }: Props) {
   const kinds = KIND_OPTIONS[context];
 
   const add = () => onChange([...entries, newEntry(context)]);
@@ -62,7 +64,7 @@ export function BuildConfigEditor({ entries, onChange, context, label, placehold
   return (
     <div className="bce-root">
       <div className="bce-header">
-        <span className="bce-label">{label ?? 'Custom Flags'}</span>
+        <span className="bce-label">{label ?? 'Custom Flags'}{info}</span>
         <button type="button" className="btn ghost bce-add-btn" onClick={add}>+ Add</button>
       </div>
 

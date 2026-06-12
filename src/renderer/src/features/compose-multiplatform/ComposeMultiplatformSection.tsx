@@ -1,19 +1,16 @@
 import type { KmpTarget } from '../../../../shared/types';
 import { KMP_TARGET_LABELS } from '../../../../shared/types';
-import { BuildConfigEditor } from '../../capabilities/buildConfig/BuildConfigEditor';
-import type { BuildFlagEntry } from '../../../../shared/types';
+import { useIntrospection } from '../../capabilities/detection/useIntrospection';
+import { DatalistInput } from '../../capabilities/detection/DatalistInput';
 
 const ALL_TARGETS: KmpTarget[] = ['android', 'ios', 'desktop', 'web'];
 
 interface Props {
   module: string;
   targets: KmpTarget[];
-  ideHint: string;
-  globalFlags: BuildFlagEntry[];
+  projectPath: string;
   onModuleChange: (v: string) => void;
   onTargetsChange: (v: KmpTarget[]) => void;
-  onIdeHintChange: (v: string) => void;
-  onGlobalFlagsChange: (v: BuildFlagEntry[]) => void;
 }
 
 const IS_MACOS = navigator.platform.startsWith('Mac') || navigator.userAgent.includes('Mac');
@@ -21,13 +18,21 @@ const IS_MACOS = navigator.platform.startsWith('Mac') || navigator.userAgent.inc
 export function ComposeMultiplatformSection({
   module,
   targets,
-  ideHint,
-  globalFlags,
+  projectPath,
   onModuleChange,
   onTargetsChange,
-  onIdeHintChange,
-  onGlobalFlagsChange,
 }: Props) {
+  const { data: introspect, loading: introspecting, detect } = useIntrospection(projectPath, 'compose-multiplatform', module);
+
+  const handleDetect = async () => {
+    const result = await detect();
+    if (result?.kmpTargets.length) {
+      // Keep iOS only if this host can build it; otherwise apply detected set as-is.
+      const applied = result.kmpTargets.filter((t) => t !== 'ios' || IS_MACOS);
+      onTargetsChange(applied);
+    }
+  };
+
   const toggleTarget = (t: KmpTarget) => {
     const next = targets.includes(t) ? targets.filter((x) => x !== t) : [...targets, t];
     onTargetsChange(next);
@@ -37,26 +42,35 @@ export function ComposeMultiplatformSection({
     <div className="mobile-section">
       <div className="mobile-section-title">Compose Multiplatform (KMP)</div>
 
-      <div className="pf-field pf-field--row">
-        <label className="pf-field pf-field--inline">
-          <span>Gradle module</span>
-          <input
-            type="text"
-            className="pf-mono"
-            placeholder="composeApp"
-            value={module}
-            onChange={(e) => onModuleChange(e.target.value)}
-          />
-        </label>
-        <label className="pf-field pf-field--inline">
-          <span>IDE hint</span>
-          <select value={ideHint} onChange={(e) => onIdeHintChange(e.target.value)}>
-            <option value="">Auto-detect</option>
-            <option value="intellij">IntelliJ IDEA</option>
-            <option value="android-studio">Android Studio</option>
-          </select>
-        </label>
+      <div className="variant-detect">
+        <span className="variant-detect-label">⚡ Auto-detect module &amp; targets</span>
+        <div className="variant-detect-spacer" />
+        <button
+          type="button"
+          className="variant-detect-btn variant-detect-btn--deep"
+          disabled={!projectPath.trim() || introspecting}
+          onClick={handleDetect}
+          title="Read modules from settings.gradle and targets from the module's build.gradle.kts"
+        >
+          <span className={introspecting ? 'variant-spin' : ''}>⟳</span> Detect
+        </button>
+        {introspect && (
+          <div className="variant-detect-status">
+            {introspect.gradleModules.length} module(s), {introspect.kmpTargets.length} target(s)
+          </div>
+        )}
       </div>
+
+      <label className="pf-field">
+        <span>Gradle module</span>
+        <DatalistInput
+          className="pf-mono"
+          placeholder="composeApp"
+          value={module}
+          options={introspect?.gradleModules ?? []}
+          onChange={onModuleChange}
+        />
+      </label>
 
       <div className="pf-field">
         <span>Build Targets</span>
@@ -83,14 +97,6 @@ export function ComposeMultiplatformSection({
           })}
         </div>
       </div>
-
-      <BuildConfigEditor
-        entries={globalFlags}
-        onChange={onGlobalFlagsChange}
-        context="android"
-        label="Global Gradle Flags"
-        placeholder="No global flags. Add --parallel, --no-daemon, etc."
-      />
     </div>
   );
 }

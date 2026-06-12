@@ -42,7 +42,6 @@ function PlatformRow({
   platform,
   disabled,
   disabledNote,
-  appIdPlaceholder,
   onChange,
 }: {
   title: string;
@@ -54,7 +53,6 @@ function PlatformRow({
   platform: MobilePlatform;
   disabled?: boolean;
   disabledNote?: string;
-  appIdPlaceholder: string;
   onChange: (patch: Partial<FirebaseEntry>) => void;
 }) {
   return (
@@ -82,16 +80,6 @@ function PlatformRow({
             hint={`Drop ${dropLabel} here`}
             onChange={(relPath) => onChange({ configFilePath: relPath })}
           />
-          <label className="pf-field">
-            <span>App ID <small>(optional)</small></span>
-            <input
-              type="text"
-              className="pf-mono"
-              placeholder={appIdPlaceholder}
-              value={entry.appId}
-              onChange={(e) => onChange({ appId: e.target.value })}
-            />
-          </label>
         </div>
       )}
     </div>
@@ -118,7 +106,6 @@ export function FirebaseSection({ value, projectPath, platform, onChange, showIo
           filters={JSON_FILTER}
           projectPath={projectPath}
           platform={platform}
-          appIdPlaceholder="1:1234567890:android:abc123"
           onChange={(p) => patch('android', p)}
         />
 
@@ -133,7 +120,6 @@ export function FirebaseSection({ value, projectPath, platform, onChange, showIo
             platform={platform}
             disabled={!IS_MACOS}
             disabledNote="macOS only"
-            appIdPlaceholder="1:1234567890:ios:abc123"
             onChange={(p) => patch('ios', p)}
           />
         )}
@@ -147,7 +133,6 @@ export function FirebaseSection({ value, projectPath, platform, onChange, showIo
             filters={JSON_FILTER}
             projectPath={projectPath}
             platform={platform}
-            appIdPlaceholder="1:1234567890:web:abc123"
             onChange={(p) => patch('desktop', p)}
           />
         )}

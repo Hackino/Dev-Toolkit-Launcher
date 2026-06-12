@@ -17,10 +17,8 @@ import { AndroidSettingsSection, DEFAULT_ANDROID_CONFIGS } from '../features/and
 import { IosSettingsSection, DEFAULT_IOS_CONFIGS } from '../features/ios/IosSettingsSection';
 import { FlutterSettingsSection, DEFAULT_FLUTTER_ENTRIES } from '../features/flutter/FlutterSettingsSection';
 import { ComposeMultiplatformSection } from '../features/compose-multiplatform/ComposeMultiplatformSection';
-import { GlobalFlagsSection } from '../capabilities/flags/GlobalFlagsSection';
 import { FirebaseSection, DEFAULT_FIREBASE_STATE, type FirebaseFormState } from '../capabilities/firebase/FirebaseSection';
-import { NativeBuildSection, DEFAULT_NATIVE_CONFIG } from '../capabilities/native/NativeBuildSection';
-import { VersionPanel } from '../capabilities/versioning/VersionPanel';
+import { DEFAULT_NATIVE_CONFIG } from '../capabilities/native/NativeBuildSection';
 import { mobileTabsFor, MOBILE_TAB_LABELS, showsIosFirebase, showsDesktopFirebase, type MobileTabKey } from '../features/registry';
 
 const PLATFORMS: MobilePlatform[] = ['android', 'ios', 'flutter', 'react-native', 'compose-multiplatform'];
@@ -321,12 +319,9 @@ export default function MobileFormPanel({ workspaceId, editingProject, onSaved, 
           <ComposeMultiplatformSection
             module={state.kmpModule}
             targets={state.kmpTargets}
-            ideHint={state.kmpIdeHint}
-            globalFlags={state.globalFlags}
+            projectPath={state.path}
             onModuleChange={(v) => set('kmpModule', v)}
             onTargetsChange={(v) => set('kmpTargets', v)}
-            onIdeHintChange={(v) => set('kmpIdeHint', v)}
-            onGlobalFlagsChange={(v) => set('globalFlags', v)}
           />
         )}
 
@@ -335,30 +330,10 @@ export default function MobileFormPanel({ workspaceId, editingProject, onSaved, 
             <div className="mobile-section-title">{activeTab === 'desktop' ? 'Desktop Target' : 'Web Target'}</div>
             <div className="mobile-section-hint">
               {activeTab === 'desktop'
-                ? `Runs the JVM desktop app via :${state.kmpModule || 'composeApp'}:desktopRun. Add JVM/Gradle options in Global Flags.`
-                : `Runs the Wasm web app via :${state.kmpModule || 'composeApp'}:wasmJsBrowserDevelopmentRun. Add web/Gradle options in Global Flags.`}
+                ? `Runs the JVM desktop app via :${state.kmpModule || 'composeApp'}:desktopRun.`
+                : `Runs the Wasm web app via :${state.kmpModule || 'composeApp'}:wasmJsBrowserDevelopmentRun.`}
             </div>
-            <GlobalFlagsSection
-              platform={state.platform}
-              flags={state.globalFlags}
-              onChange={(v) => set('globalFlags', v)}
-            />
           </div>
-        )}
-
-        {activeTab === 'global' && (
-          <GlobalFlagsSection
-            platform={state.platform}
-            flags={state.globalFlags}
-            onChange={(v) => set('globalFlags', v)}
-          />
-        )}
-
-        {activeTab === 'native' && (
-          <NativeBuildSection
-            value={state.native}
-            onChange={(v) => set('native', v)}
-          />
         )}
 
         {activeTab === 'firebase' && (
@@ -370,10 +345,6 @@ export default function MobileFormPanel({ workspaceId, editingProject, onSaved, 
             showIos={showsIosFirebase(state.platform)}
             showDesktop={showsDesktopFirebase(state.platform)}
           />
-        )}
-
-        {activeTab === 'version' && isEdit && (
-          <VersionPanel projectPath={state.path} platform={state.platform} />
         )}
       </div>
 

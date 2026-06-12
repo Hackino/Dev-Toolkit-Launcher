@@ -5,7 +5,7 @@
  */
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { MobilePlatform, MobileIntrospection, SigningConfigInfo } from '../../../shared/types';
+import type { MobilePlatform, MobileIntrospection, SigningConfigInfo, KmpTarget } from '../../../shared/types';
 import {
   readIfExists,
   extractBlock,
@@ -134,6 +134,20 @@ function parseSigningConfigs(projectPath: string, module: string): SigningConfig
   return configs;
 }
 
+// ─── KMP build targets (build.gradle.kts kotlin{} block) ────────────────────────
+
+function parseKmpTargets(projectPath: string, module: string): KmpTarget[] {
+  const gradleFile = findModuleGradleFile(projectPath, module);
+  const source = gradleFile ? readIfExists(gradleFile) : null;
+  if (!source) return [];
+  const targets: KmpTarget[] = [];
+  if (/androidTarget\s*\(|\bandroidLibrary\b|\bandroid\s*\(\s*\)/.test(source)) targets.push('android');
+  if (/ios(X64|Arm64|SimulatorArm64)\s*\(|\bios\s*\(\s*\)/.test(source)) targets.push('ios');
+  if (/\bjvm\s*\(/.test(source)) targets.push('desktop');
+  if (/\bwasmJs\s*\(|\bjs\s*\(/.test(source)) targets.push('web');
+  return targets;
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────────
 
 export function introspectProject(
@@ -150,6 +164,7 @@ export function introspectProject(
     applicationIds: [],
     bundleIds: [],
     signingConfigs: [],
+    kmpTargets: [],
     warnings,
   };
 
@@ -161,6 +176,9 @@ export function introspectProject(
     }
     if (usesIos) {
       result.bundleIds = parseBundleIds(projectPath);
+    }
+    if (platform === 'compose-multiplatform') {
+      result.kmpTargets = parseKmpTargets(projectPath, module);
     }
   } catch (err) {
     warnings.push(String(err));

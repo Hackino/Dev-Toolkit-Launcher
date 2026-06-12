@@ -61,6 +61,8 @@ Everything is configured through the UI and persisted to a local SQLite database
 - **Build-variant auto-detection** — parse `build.gradle`, `lib/main*.dart`, and `.xcscheme` files instantly, with an optional deep scan via `./gradlew tasks` / `xcodebuild -list`.
 - **Drag-and-drop Firebase & keystores** — drop `google-services.json`, `GoogleService-Info.plist`, or a `.jks` / `.keystore`; it's validated and placed in the right location. Autodetect finds existing ones.
 - **Multi-platform fan-out** — Flutter / RN / KMP projects spread into **one column per platform** (Android · iOS · Desktop · Web) instead of a dropdown.
+- **Device-aware run / install** — each column has a live device/emulator picker (`adb` · `simctl` · `flutter`); **Run** is gated on a selected target.
+- **Install to a device** — pick any `.apk` or `.aab` from disk; App Bundles are converted and installed via **bundletool**, fetched automatically on first use.
 - **Version management** — read & bump version name / code / build number across `build.gradle`, `Info.plist`, and `pubspec.yaml` (with `.bak` backups).
 
 ### Platform
@@ -86,15 +88,17 @@ Every command, port, and environment variable is overridable per project and per
 
 ## Mobile development
 
-| Platform | Build | Run | Release |
+| Platform | Build | Run | Bundle / Release |
 |---|---|---|---|
-| **Android Native** | `gradlew assemble<Variant>` | install + `adb` launch | `bundle<Flavor>Release` + injected signing |
+| **Android Native** | `gradlew assemble<Variant>` | install + `adb` launch (device-gated) | `bundle<Variant>` (selected variant) + injected signing |
 | **iOS Native** *(macOS)* | `xcodebuild build` | simulator / device | archive + export `.ipa` |
 | **Flutter** | `flutter build apk / ipa / web / <desktop>` | `flutter run -d <device>` | `appbundle` / `ipa` / `web` |
 | **React Native** | gradle (Android) · `build-ios` (iOS) | `run-android` / `run-ios` | `bundleRelease` / `build-ios --mode Release` |
 | **Compose Multiplatform** | gradle per target | `desktopRun` / android / ios / web | `bundleRelease` (per target) |
 
 The core extensibility primitive is a **dynamic build flag** — a typed, toggleable `{ kind, key, value }` entry. Strategies assemble the final CLI command from the user's flags at build time, so any Gradle property, Xcode setting, or dart-define can be added without code changes. iOS actions are guarded at three layers and shown disabled (not hidden) on non-macOS hosts.
+
+**Bundle & install.** The Android **Bundle** action builds an `.aab` for the variant currently selected in the column's dropdown (flavor + build type), with signing flags injected from your keystore config. **Install** opens a file picker: an `.apk` goes straight to the device via `adb install -r`, while an `.aab` is run through **bundletool** (`build-apks --mode=universal` → `install-apks`), which is downloaded to the app's data dir the first time it's needed. Both require a device selected in the column.
 
 ## Tech stack
 
@@ -106,7 +110,7 @@ The core extensibility primitive is a **dynamic build flag** — a typed, toggle
 | Terminal | `@xterm/xterm` + fit addon |
 | Persistence | `better-sqlite3` with a versioned migration runner |
 | Process control | Node `child_process` + `tree-kill` |
-| Toolchain integration | `gradle` / `gradlew`, `xcodebuild` / `xcrun simctl`, `flutter`, `adb` |
+| Toolchain integration | `gradle` / `gradlew`, `xcodebuild` / `xcrun simctl`, `flutter`, `adb`, `bundletool` (auto-fetched) |
 
 ## Architecture
 
@@ -214,7 +218,11 @@ npm run package    # Windows installer + portable into release/
    - **Build configs / entry points** — click **⚡ Detect** to parse them from the project (or **Deep scan** for ground truth), or add them manually.
    - **Signing** — drop your keystore onto the drop zone; passwords are referenced by **env-var name only**.
    - **Firebase** — drop `google-services.json` / `GoogleService-Info.plist`; it's validated and placed correctly (desktop config supported for KMP).
-3. On the dashboard, multi-platform projects appear as **one column per platform**, each with its own Build / Run / Release / Clean and platform tools (Logcat, ADB shell, simulator logs, `pub get`, Doctor…).
+3. On the dashboard, multi-platform projects appear as **one column per platform**, each with its own:
+   - **Variant + device pickers** — choose the build config / entry point and the target device or emulator.
+   - **Build / Run / Bundle (Android) or Archive (iOS) / Clean** — Run and Install require a selected device.
+   - **Install** — pick an `.apk` or `.aab`; bundles are installed via bundletool automatically.
+   - Flutter columns also expose **`pub get`** and **Doctor**.
 
 ## Security & privacy
 
