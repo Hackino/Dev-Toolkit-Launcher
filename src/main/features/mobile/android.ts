@@ -50,9 +50,8 @@ const commands: MobileCommands = {
   },
 
   releaseCommand(ctx) {
-    const cfg = ctx.androidBuildConfig;
-    const flavor = cfg?.flavor ? capitalize(cfg.flavor) : '';
-    const task = `${modulePrefix(ctx)}bundle${flavor}Release`;
+    // Bundle (.aab) for the currently selected variant (flavor + build type).
+    const task = `${modulePrefix(ctx)}bundle${variantSuffix(ctx)}`;
     const signingFlags = androidSigningFlags(ctx.config.androidSigning, ctx.resolvedEnv);
     return [gradlewBin(ctx.projectPath), task, ...buildFlags(ctx), ...signingFlags].join(' ');
   },
@@ -74,9 +73,10 @@ const commands: MobileCommands = {
   },
 
   expectedArtifactPath(ctx) {
+    // Release builds produce an App Bundle (.aab) for the selected variant.
     const mod = ctx.config.androidModule || 'app';
     const variant = variantSuffix(ctx).toLowerCase();
-    return join(ctx.projectPath, mod, 'build', 'outputs', 'apk', variant, `${mod}-${variant}.apk`);
+    return join(ctx.projectPath, mod, 'build', 'outputs', 'bundle', variant, `${mod}-${variant}.aab`);
   },
 };
 

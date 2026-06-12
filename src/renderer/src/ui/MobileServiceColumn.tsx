@@ -157,6 +157,24 @@ export default function MobileServiceColumn({
   const doClean = () => run(() => window.launcher.mobileClean({ projectPath: project.path, runKey }));
   const primaryRun = kind === 'android' ? doRunDevice : doRunEmu;
 
+  // Install: pick an .apk/.aab from disk, then install onto the selected device.
+  // .aab is converted + installed via bundletool (downloaded on first use).
+  const doInstall = async () => {
+    if (!selectedDeviceId) return;
+    const file = await window.launcher.mobilePickFile({
+      title: 'Select APK or AAB to install',
+      defaultPath: lastBuild?.lastArtifactPath ?? undefined,
+      filters: [
+        { name: 'Android package', extensions: ['apk', 'aab'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    if (!file) return;
+    await run(() =>
+      window.launcher.mobileInstallArtifact({ projectPath: project.path, deviceId: selectedDeviceId, artifactPath: file, runKey }),
+    );
+  };
+
   return (
     <section className="column mobile-column" data-platform={platform} data-kind={kind}>
       {/* Header */}
@@ -238,8 +256,8 @@ export default function MobileServiceColumn({
           </select>
         )}
 
-        {/* Device selector (android / ios columns only) */}
-        {usesDevices && kindDevices.length > 0 && (
+        {/* Device selector (android / ios columns only) — required for Run/Install */}
+        {usesDevices && (
           <select
             className="mobile-selector mobile-selector--device"
             value={selectedDeviceId ?? ''}
@@ -247,7 +265,7 @@ export default function MobileServiceColumn({
             disabled={iosBlocked}
             title="Target device"
           >
-            <option value="">No device</option>
+            <option value="">{kindDevices.length === 0 ? 'No devices found' : 'No device'}</option>
             {kindDevices.filter((d) => d.kind === 'device').length > 0 && (
               <optgroup label="Devices">
                 {kindDevices.filter((d) => d.kind === 'device').map((d) => (
@@ -277,9 +295,14 @@ export default function MobileServiceColumn({
           </>
         ) : (
           <>
-            <ActionButton label="▶ Run" disabled={taskBusy} onClick={primaryRun} />
+            <ActionButton
+              label="▶ Run"
+              disabled={taskBusy || !selectedDeviceId}
+              title={!selectedDeviceId ? 'Select a device first' : 'Run on selected device'}
+              onClick={primaryRun}
+            />
             <ActionButton label="🔨 Build" disabled={taskBusy} onClick={doBuild} />
-            <ActionButton label="📦 Release" disabled={taskBusy} onClick={doRelease} variant="primary" />
+            <ActionButton label="📦 Bundle" disabled={taskBusy} title="Build an .aab for the selected variant" onClick={doRelease} variant="primary" />
             <ActionButton label="🧹 Clean" disabled={taskBusy} onClick={doClean} />
           </>
         )}
@@ -290,18 +313,9 @@ export default function MobileServiceColumn({
         {kind === 'android' && (
           <ActionButton
             label="📥 Install"
-            disabled={taskBusy || !selectedDeviceId || !lastBuild?.lastArtifactPath}
-            title={!selectedDeviceId ? 'Select a device first' : !lastBuild?.lastArtifactPath ? 'No artifact available' : 'Install APK on device'}
-            onClick={() => run(() =>
-              window.launcher.mobileInstallApk({ projectPath: project.path, deviceId: selectedDeviceId!, apkPath: lastBuild!.lastArtifactPath!, runKey })
-            )}
-          />
-        )}
-        {kind === 'ios' && (
-          <ActionButton
-            label="🔬 Logs"
-            disabled={taskBusy || iosBlocked}
-            onClick={() => run(() => window.launcher.mobileViewLogs({ projectPath: project.path, deviceId: selectedDeviceId, runKey }))}
+            disabled={taskBusy || !selectedDeviceId}
+            title={!selectedDeviceId ? 'Select a device first' : 'Choose an .apk / .aab to install on the device'}
+            onClick={doInstall}
           />
         )}
         {platform === 'flutter' && (

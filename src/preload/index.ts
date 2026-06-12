@@ -96,6 +96,8 @@ const api: LauncherApi = {
     ipcRenderer.invoke('mobile:generateRelease', args) as ReturnType<LauncherApi['mobileGenerateRelease']>,
   mobileInstallApk: (args: { projectPath: string; deviceId: string; apkPath: string }) =>
     ipcRenderer.invoke('mobile:installApk', args) as ReturnType<LauncherApi['mobileInstallApk']>,
+  mobileInstallArtifact: (args: { projectPath: string; deviceId: string; artifactPath: string }) =>
+    ipcRenderer.invoke('mobile:installArtifact', args) as ReturnType<LauncherApi['mobileInstallArtifact']>,
   mobileAdbShell: (args: { projectPath: string; deviceId: string; command: string }) =>
     ipcRenderer.invoke('mobile:adbShell', args) as ReturnType<LauncherApi['mobileAdbShell']>,
   mobilePubGet: (args: { projectPath: string }) =>

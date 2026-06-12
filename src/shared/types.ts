@@ -554,6 +554,8 @@ export type LauncherApi = {
   mobileStopTask: (args: MobileTaskRef) => Promise<StopResult>;
   mobileGenerateRelease: (args: MobileBuildArgs) => Promise<MobileReleaseResult>;
   mobileInstallApk: (args: MobileTaskRef & { deviceId: string; apkPath: string }) => Promise<MobileActionResult>;
+  /** Install an .apk or .aab onto a device. .aab is converted+installed via bundletool (auto-downloaded if missing). */
+  mobileInstallArtifact: (args: MobileTaskRef & { deviceId: string; artifactPath: string }) => Promise<MobileActionResult>;
   mobileAdbShell: (args: MobileTaskRef & { deviceId: string; command: string }) => Promise<MobileActionResult>;
   mobilePubGet: (args: MobileTaskRef) => Promise<MobileActionResult>;
   mobileFlutterDoctor: (args: MobileTaskRef) => Promise<MobileActionResult>;

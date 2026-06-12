@@ -1,5 +1,6 @@
-import { ipcMain, dialog, shell } from 'electron';
+import { ipcMain, dialog, shell, app } from 'electron';
 import { statSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import type {
   MobileBuildArgs,
   MobileRunArgs,
@@ -38,6 +39,14 @@ import { readPubspecVersion, writePubspecVersion } from '../../capabilities/vers
 import { readGradlePropertiesVersion, writeGradlePropertiesVersion } from '../../capabilities/versioning/gradlePropertiesVersion';
 
 const IOS_NOT_MACOS = 'iOS builds require macOS. This action is disabled on non-macOS systems.';
+
+// bundletool — used to convert/install Android App Bundles (.aab) onto a device.
+const BUNDLETOOL_VERSION = '1.18.1';
+const BUNDLETOOL_URL = `https://github.com/google/bundletool/releases/download/${BUNDLETOOL_VERSION}/bundletool-all-${BUNDLETOOL_VERSION}.jar`;
+
+function bundletoolJarPath(): string {
+  return join(app.getPath('userData'), 'tools', `bundletool-${BUNDLETOOL_VERSION}.jar`);
+}
 
 function requireMacos(): boolean {
   return process.platform === 'darwin';
@@ -242,6 +251,58 @@ export function registerMobileIpc(): void {
     try {
       const command = `adb -s ${args.deviceId} install -r "${args.apkPath}"`;
       return runMobileTask({ taskKey: args.runKey ?? args.projectPath, command, displayCommand: command, cwd: args.projectPath });
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
+  // ─── Install Artifact (.apk direct, .aab via bundletool) ──────────────────
+  ipcMain.handle('mobile:installArtifact', (_e, args: MobileTaskRef & { deviceId: string; artifactPath: string }) => {
+    try {
+      if (!args.deviceId) return { ok: false, error: 'Select a device first' };
+      const taskKey = args.runKey ?? args.projectPath;
+      const file = args.artifactPath;
+      const lower = file.toLowerCase();
+
+      if (lower.endsWith('.apk')) {
+        const command = `adb -s ${args.deviceId} install -r "${file}"`;
+        return runMobileTask({ taskKey, command, displayCommand: command, cwd: args.projectPath });
+      }
+
+      if (lower.endsWith('.aab')) {
+        const jar = bundletoolJarPath();
+        const toolsDir = dirname(jar);
+        const apks = join(toolsDir, 'install-tmp.apks');
+
+        // Optional release signing (mirrors mobile:generateRelease). Without a
+        // keystore, bundletool signs the universal APK with its debug key, which
+        // is fine for installing onto a test device.
+        let ksFlags = '';
+        let displayKsFlags = '';
+        try {
+          const project = getProject(args.projectPath);
+          const config = MobileConfigRepository.get(project.id);
+          const s = config?.androidSigning;
+          if (s?.keystorePath && s.keyAlias) {
+            const env = config ? resolveSigningEnv(config) : {};
+            const storePwd = s.storePasswordEnv ? env[s.storePasswordEnv] : undefined;
+            const keyPwd = s.keyPasswordEnv ? env[s.keyPasswordEnv] : undefined;
+            const base = ` --ks="${s.keystorePath}" --ks-key-alias="${s.keyAlias}"`;
+            ksFlags = base + (storePwd ? ` --ks-pass=pass:${storePwd}` : '') + (keyPwd ? ` --key-pass=pass:${keyPwd}` : '');
+            displayKsFlags = base + (storePwd ? ' --ks-pass=pass:***' : '') + (keyPwd ? ' --key-pass=pass:***' : '');
+          }
+        } catch { /* config optional — fall back to debug signing */ }
+
+        const ensure = `mkdir -p "${toolsDir}" && { [ -f "${jar}" ] || curl -L --fail -o "${jar}" "${BUNDLETOOL_URL}"; }`;
+        const buildApks = (signing: string) =>
+          `java -jar "${jar}" build-apks --bundle="${file}" --output="${apks}" --overwrite --mode=universal${signing}`;
+        const installApks = `java -jar "${jar}" install-apks --apks="${apks}" --device-id=${args.deviceId}`;
+        const command = `${ensure} && ${buildApks(ksFlags)} && ${installApks}`;
+        const displayCommand = `${ensure} && ${buildApks(displayKsFlags)} && ${installApks}`;
+        return runMobileTask({ taskKey, command, displayCommand, cwd: args.projectPath });
+      }
+
+      return { ok: false, error: 'Unsupported file — select an .apk or .aab' };
     } catch (err) {
       return { ok: false, error: String(err) };
     }
