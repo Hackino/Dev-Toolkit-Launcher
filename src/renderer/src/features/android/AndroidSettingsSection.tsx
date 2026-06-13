@@ -1,13 +1,10 @@
-import { useState } from 'react';
-import type { AndroidBuildConfig, AndroidSigningConfig, MobilePlatform } from '../../../../shared/types';
-import { BuildConfigEditor, MinifySection, type MinifyState } from '../../capabilities/buildConfig/BuildConfigEditor';
+import { useState, useEffect } from 'react';
+import type { AndroidBuildConfig, AndroidBuildTypeInfo, MobilePlatform } from '../../../../shared/types';
+import { BuildConfigEditor } from '../../capabilities/buildConfig/BuildConfigEditor';
 import { VariantDetector } from '../../capabilities/variants/VariantDetector';
 import { applyAndroidDetection } from '../../capabilities/variants/variantApply';
-import { FileDropField } from '../../capabilities/assets/FileDropField';
 import { useIntrospection } from '../../capabilities/detection/useIntrospection';
-import { DatalistInput } from '../../capabilities/detection/DatalistInput';
-
-const KEYSTORE_FILTER = [{ name: 'Keystore', extensions: ['jks', 'keystore', 'p12', 'pfx'] }];
+import { SelectInput } from '../../capabilities/detection/SelectInput';
 
 function newBuildConfig(name: string, buildType: string): AndroidBuildConfig {
   return {
@@ -16,7 +13,9 @@ function newBuildConfig(name: string, buildType: string): AndroidBuildConfig {
     buildType,
     flavor: null,
     isDefault: false,
-    minify: { enabled: false, r8FullMode: false, proguardFiles: [] },
+    debuggable: buildType !== 'release',
+    signingConfig: null,
+    minify: { enabled: false, proguardFiles: [] },
     customFlags: [],
   };
 }
@@ -29,42 +28,29 @@ interface Props {
   applicationId: string;
   module: string;
   configs: AndroidBuildConfig[];
-  signing: AndroidSigningConfig;
   projectPath: string;
   platform: MobilePlatform;
   onApplicationIdChange: (v: string) => void;
   onModuleChange: (v: string) => void;
   onConfigsChange: (v: AndroidBuildConfig[]) => void;
-  onSigningChange: (v: AndroidSigningConfig) => void;
 }
+
+const sameFiles = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 function BuildConfigItem({
   config,
+  signingConfigNames,
+  detected,
   onUpdate,
-  onRemove,
-  canRemove,
 }: {
   config: AndroidBuildConfig;
+  signingConfigNames: string[];
+  detected: boolean;
   onUpdate: (c: AndroidBuildConfig) => void;
-  onRemove: () => void;
-  canRemove: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const set = <K extends keyof AndroidBuildConfig>(k: K, v: AndroidBuildConfig[K]) =>
     onUpdate({ ...config, [k]: v });
-
-  const minifyState: MinifyState = {
-    enabled: config.minify.enabled,
-    r8FullMode: config.minify.r8FullMode,
-    proguardFiles: config.minify.proguardFiles,
-  };
-
-  const activeFlags = config.customFlags.filter((f) => f.enabled).length;
-  const advancedSummary = [
-    config.minify.enabled ? 'R8 on' : null,
-    activeFlags > 0 ? `${activeFlags} flag${activeFlags === 1 ? '' : 's'}` : null,
-  ].filter(Boolean).join(' · ') || 'none';
 
   return (
     <div className="mobile-card">
@@ -86,65 +72,59 @@ function BuildConfigItem({
           />
           Default
         </label>
-        {canRemove && (
-          <button
-            type="button"
-            className="btn ghost pf-env-remove"
-            onClick={(e) => { e.stopPropagation(); onRemove(); }}
-            title="Remove"
-          >✕</button>
-        )}
       </div>
 
       {expanded && (
         <div className="mobile-card-body">
+          <div className="mobile-detected-note">
+            {detected
+              ? 'Detected from build.gradle — read-only.'
+              : `No "${config.buildType}" build type detected in build.gradle.`}
+          </div>
+
           <div className="pf-field pf-field--row">
-            <label className="pf-field pf-field--inline">
-              <span>Build type</span>
-              <input
-                type="text"
-                value={config.buildType}
-                placeholder="debug"
-                onChange={(e) => set('buildType', e.target.value)}
-              />
+            <label className="minify-opt minify-opt--readonly">
+              <input type="checkbox" checked={config.debuggable} disabled readOnly />
+              <span>Debuggable</span>
             </label>
             <label className="pf-field pf-field--inline">
-              <span>Flavor <small>(optional)</small></span>
-              <input
-                type="text"
-                value={config.flavor ?? ''}
-                placeholder="e.g. staging"
-                onChange={(e) => set('flavor', e.target.value || null)}
+              <span>Signing config <small>(detected)</small></span>
+              <SelectInput
+                className="pf-mono"
+                placeholder="(none)"
+                value={config.signingConfig ?? ''}
+                options={signingConfigNames}
+                onChange={(v) => set('signingConfig', v || null)}
+                disabled
               />
             </label>
           </div>
 
-          <button
-            type="button"
-            className="mobile-advanced-toggle"
-            onClick={() => setShowAdvanced((s) => !s)}
-          >
-            <span className="mobile-card-chevron">{showAdvanced ? '▾' : '▸'}</span>
-            <span>Advanced</span>
-            <span className="mobile-advanced-summary">R8 / ProGuard · custom flags — {advancedSummary}</span>
-          </button>
-
-          {showAdvanced && (
-            <div className="mobile-advanced-body">
-              <MinifySection
-                value={minifyState}
-                onChange={(v) => onUpdate({ ...config, minify: v })}
-              />
-
-              <BuildConfigEditor
-                entries={config.customFlags}
-                onChange={(flags) => set('customFlags', flags)}
-                context="android"
-                label="Custom Gradle Flags"
-                placeholder="No extra flags. Add -P props, --flags, or env vars."
-              />
+          <div className="minify-section">
+            <div className="minify-header">Minify / R8</div>
+            <label className="minify-opt minify-opt--readonly">
+              <input type="checkbox" checked={config.minify.enabled} disabled readOnly />
+              <span>Enable R8</span>
+            </label>
+            <div className="minify-proguard">
+              <div className="minify-files-header"><span>ProGuard files</span></div>
+              {config.minify.proguardFiles.length > 0 ? (
+                config.minify.proguardFiles.map((f, i) => (
+                  <code key={i} className="pf-mono minify-file-readonly">{f}</code>
+                ))
+              ) : (
+                <span className="pf-env-empty">None detected</span>
+              )}
             </div>
-          )}
+          </div>
+
+          <BuildConfigEditor
+            entries={config.customFlags}
+            onChange={(flags) => set('customFlags', flags)}
+            context="android"
+            label="Custom Gradle Flags"
+            placeholder="No extra flags. Add -P props, --flags, or env vars."
+          />
         </div>
       )}
     </div>
@@ -155,38 +135,47 @@ export function AndroidSettingsSection({
   applicationId,
   module,
   configs,
-  signing,
   projectPath,
   platform,
   onApplicationIdChange,
   onModuleChange,
   onConfigsChange,
-  onSigningChange,
 }: Props) {
-  const addConfig = () =>
-    onConfigsChange([...configs, newBuildConfig(`Config ${configs.length + 1}`, 'release')]);
-
   const updateConfig = (id: string, c: AndroidBuildConfig) =>
     onConfigsChange(configs.map((x) => (x.id === id ? c : x)));
 
-  const removeConfig = (id: string) =>
-    onConfigsChange(configs.filter((x) => x.id !== id));
-
-  const setSigning = <K extends keyof AndroidSigningConfig>(k: K, v: AndroidSigningConfig[K]) =>
-    onSigningChange({ ...signing, [k]: v });
-
   const { data: introspect, loading: introspecting, detect } = useIntrospection(projectPath, platform, module);
+  const signingConfigNames = introspect?.signingConfigs.map((s) => s.name) ?? [];
+  const byType = new Map<string, AndroidBuildTypeInfo>(
+    (introspect?.buildTypeConfigs ?? []).map((b) => [b.name.toLowerCase(), b]),
+  );
 
-  const applySigningConfig = (name: string) => {
-    const sc = introspect?.signingConfigs.find((c) => c.name === name);
-    if (!sc) return;
-    onSigningChange({
-      keystorePath: sc.storeFile ?? signing.keystorePath,
-      keyAlias: sc.keyAlias ?? signing.keyAlias,
-      storePasswordEnv: sc.storePasswordEnv ?? signing.storePasswordEnv,
-      keyPasswordEnv: sc.keyPasswordEnv ?? signing.keyPasswordEnv,
+  // Auto-apply detected per-buildType settings onto each config (read-only in the UI).
+  useEffect(() => {
+    if (!introspect) return;
+    let changed = false;
+    const next = configs.map((c) => {
+      const info = byType.get(c.buildType.toLowerCase());
+      if (!info) return c;
+      if (
+        c.debuggable === info.debuggable &&
+        c.signingConfig === info.signingConfig &&
+        c.minify.enabled === info.minifyEnabled &&
+        sameFiles(c.minify.proguardFiles, info.proguardFiles)
+      ) {
+        return c;
+      }
+      changed = true;
+      return {
+        ...c,
+        debuggable: info.debuggable,
+        signingConfig: info.signingConfig,
+        minify: { enabled: info.minifyEnabled, proguardFiles: info.proguardFiles },
+      };
     });
-  };
+    if (changed) onConfigsChange(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [introspect]);
 
   return (
     <div className="mobile-section">
@@ -200,7 +189,7 @@ export function AndroidSettingsSection({
           className="variant-detect-btn variant-detect-btn--deep"
           disabled={!projectPath.trim() || introspecting}
           onClick={detect}
-          title="Read module, application IDs, and signing from the project"
+          title="Read module, application IDs, signing configs, and build types from the project"
         >
           <span className={introspecting ? 'variant-spin' : ''}>⟳</span> Detect
         </button>
@@ -215,7 +204,7 @@ export function AndroidSettingsSection({
       <div className="pf-field pf-field--row">
         <label className="pf-field pf-field--inline">
           <span>Application ID</span>
-          <DatalistInput
+          <SelectInput
             className="pf-mono"
             placeholder="com.example.app"
             value={applicationId}
@@ -225,7 +214,7 @@ export function AndroidSettingsSection({
         </label>
         <label className="pf-field pf-field--inline">
           <span>Gradle module</span>
-          <DatalistInput
+          <SelectInput
             className="pf-mono"
             placeholder="app"
             value={module}
@@ -245,82 +234,17 @@ export function AndroidSettingsSection({
 
       <div className="mobile-subsection-header">
         <span>Build Configurations</span>
-        <button type="button" className="btn ghost pf-env-add" onClick={addConfig}>+ Add</button>
       </div>
 
       {configs.map((c) => (
         <BuildConfigItem
           key={c.id}
           config={c}
+          signingConfigNames={signingConfigNames}
+          detected={byType.has(c.buildType.toLowerCase())}
           onUpdate={(updated) => updateConfig(c.id, updated)}
-          onRemove={() => removeConfig(c.id)}
-          canRemove={configs.length > 1}
         />
       ))}
-
-      <div className="mobile-subsection-header" style={{ marginTop: 16 }}>
-        <span>Keystore / Signing</span>
-      </div>
-      {introspect && introspect.signingConfigs.length > 0 && (
-        <label className="pf-field">
-          <span>Detected signing config <small>(pick one to fill the fields below)</small></span>
-          <select
-            className="pf-mono"
-            defaultValue=""
-            onChange={(e) => { applySigningConfig(e.target.value); }}
-          >
-            <option value="" disabled>Select a detected signingConfig…</option>
-            {introspect.signingConfigs.map((sc) => (
-              <option key={sc.name} value={sc.name}>{sc.name}</option>
-            ))}
-          </select>
-        </label>
-      )}
-      <FileDropField
-        label="Keystore (.jks / .keystore)"
-        value={signing.keystorePath ?? ''}
-        projectPath={projectPath}
-        platform={platform}
-        kind="keystore"
-        filters={KEYSTORE_FILTER}
-        hint="Drop your release keystore here"
-        onChange={(relPath) => setSigning('keystorePath', relPath || null)}
-      />
-      <div className="mobile-signing-grid">
-        <label className="pf-field">
-          <span>Key alias</span>
-          <input
-            type="text"
-            className="pf-mono"
-            placeholder="my-key-alias"
-            value={signing.keyAlias ?? ''}
-            onChange={(e) => setSigning('keyAlias', e.target.value || null)}
-          />
-        </label>
-        <label className="pf-field">
-          <span>Store password env var</span>
-          <input
-            type="text"
-            className="pf-mono"
-            placeholder="STORE_PASSWORD"
-            value={signing.storePasswordEnv ?? ''}
-            onChange={(e) => setSigning('storePasswordEnv', e.target.value || null)}
-          />
-        </label>
-        <label className="pf-field">
-          <span>Key password env var</span>
-          <input
-            type="text"
-            className="pf-mono"
-            placeholder="KEY_PASSWORD"
-            value={signing.keyPasswordEnv ?? ''}
-            onChange={(e) => setSigning('keyPasswordEnv', e.target.value || null)}
-          />
-        </label>
-      </div>
-      <div className="mobile-signing-note">
-        Passwords are never stored. Enter the env variable name — the actual value is read from your environment at build time.
-      </div>
     </div>
   );
 }

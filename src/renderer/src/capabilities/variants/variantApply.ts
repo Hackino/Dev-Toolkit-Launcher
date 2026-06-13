@@ -48,13 +48,16 @@ export function applyAndroidDetection(
       continue;
     }
     const { flavor, buildType } = splitVariant(v, buildTypes);
+    const isRelease = buildType.includes('release');
     result.push({
       id: crypto.randomUUID(),
       name,
       buildType,
       flavor,
       isDefault: false,
-      minify: { enabled: buildType.includes('release'), r8FullMode: false, proguardFiles: [] },
+      debuggable: !isRelease,
+      signingConfig: null,
+      minify: { enabled: isRelease, proguardFiles: [] },
       customFlags: [],
     });
   }

@@ -20,7 +20,6 @@ function buildFlags(ctx: MobileCommandContext): string[] {
   const cfg = ctx.androidBuildConfig;
   const combined = mergeFlags(ctx.config.globalFlags, cfg?.customFlags ?? []);
   const flags = resolveFlags(combined, ['gradle-prop', 'gradle-flag', 'gradle-system-prop']);
-  if (cfg?.minify.enabled && cfg.minify.r8FullMode) flags.push('-Pandroid.enableR8.fullMode=true');
   if (cfg?.minify.proguardFiles?.length) flags.push(`-PminifyEnabled=${cfg.minify.enabled}`);
   return flags;
 }

@@ -61,21 +61,70 @@ function toRel(projectPath: string, full: string): string {
 
 // ─── Detection ─────────────────────────────────────────────────────────────────
 
+// Known conventional locations for google-services.json across project shapes:
+// modern KMP (composeApp/), older KMP (androidApp/), native Android (app/),
+// and Flutter / React Native (android/app/).
+const ANDROID_GS_CANDIDATES = [
+  'composeApp/google-services.json',
+  'androidApp/google-services.json',
+  'app/google-services.json',
+  'android/app/google-services.json',
+  'composeApp/src/androidMain/google-services.json',
+  'androidApp/src/main/google-services.json',
+];
+
+// Known locations for GoogleService-Info.plist: KMP (iosApp/, iosApp/iosApp/),
+// Flutter (ios/Runner/), native / React Native (ios/).
+const IOS_GS_CANDIDATES = [
+  'iosApp/iosApp/GoogleService-Info.plist',
+  'iosApp/GoogleService-Info.plist',
+  'ios/Runner/GoogleService-Info.plist',
+  'ios/GoogleService-Info.plist',
+];
+
+const DESKTOP_GS_CANDIDATES = [
+  'desktopApp/google-services.json',
+  'desktopApp/src/jvmMain/resources/google-services.json',
+];
+
+function firstExisting(projectPath: string, candidates: string[]): string | null {
+  for (const rel of candidates) {
+    if (existsSync(join(projectPath, rel))) return rel.split('\\').join('/');
+  }
+  return null;
+}
+
 export function detectAssets(projectPath: string, _platform: MobilePlatform): DetectedAssets {
-  const androidMatches = walk(projectPath, (n) => n === 'google-services.json');
-  const iosMatches = walk(projectPath, (n) => n === 'GoogleService-Info.plist');
+  // 1) Check known conventional locations first — this reliably classifies
+  //    KMP (composeApp/) vs desktop, which a generic scan cannot.
+  let firebaseAndroid = firstExisting(projectPath, ANDROID_GS_CANDIDATES);
+  let firebaseIos = firstExisting(projectPath, IOS_GS_CANDIDATES);
+  let firebaseDesktop = firstExisting(projectPath, DESKTOP_GS_CANDIDATES);
+
+  // 2) Fall back to a recursive scan for anything still unresolved.
+  if (!firebaseAndroid || !firebaseIos || !firebaseDesktop) {
+    const androidMatches = walk(projectPath, (n) => n === 'google-services.json');
+    const iosMatches = walk(projectPath, (n) => n === 'GoogleService-Info.plist');
+    // Desktop only when the path clearly belongs to a desktop/JVM module.
+    const isDesktop = (full: string) => /desktopapp|[/\\]desktop[/\\]|jvmmain/i.test(full);
+
+    if (!firebaseDesktop) {
+      const m = androidMatches.find(isDesktop);
+      if (m) firebaseDesktop = toRel(projectPath, m);
+    }
+    if (!firebaseAndroid) {
+      const m = androidMatches.find((p) => !isDesktop(p));
+      if (m) firebaseAndroid = toRel(projectPath, m);
+    }
+    if (!firebaseIos && iosMatches[0]) firebaseIos = toRel(projectPath, iosMatches[0]);
+  }
+
   const keystores = walk(projectPath, (n) => /\.(jks|keystore)$/i.test(n));
 
-  // Heuristics: android firebase lives under an android app module; desktop under a
-  // desktop/jvm resources dir. Split the json matches accordingly.
-  const isDesktop = (full: string) => /desktop|jvm|compose/i.test(full);
-  const androidJson = androidMatches.find((p) => !isDesktop(p)) ?? null;
-  const desktopJson = androidMatches.find((p) => isDesktop(p)) ?? null;
-
   return {
-    firebaseAndroid: androidJson ? toRel(projectPath, androidJson) : null,
-    firebaseIos: iosMatches[0] ? toRel(projectPath, iosMatches[0]) : null,
-    firebaseDesktop: desktopJson ? toRel(projectPath, desktopJson) : null,
+    firebaseAndroid,
+    firebaseIos,
+    firebaseDesktop,
     keystores: keystores.map((p) => toRel(projectPath, p)),
   };
 }

@@ -4,7 +4,7 @@ import { BuildConfigEditor } from '../../capabilities/buildConfig/BuildConfigEdi
 import { VariantDetector } from '../../capabilities/variants/VariantDetector';
 import { applyIosDetection } from '../../capabilities/variants/variantApply';
 import { useIntrospection } from '../../capabilities/detection/useIntrospection';
-import { DatalistInput } from '../../capabilities/detection/DatalistInput';
+import { SelectInput } from '../../capabilities/detection/SelectInput';
 
 function newIosConfig(name: string, scheme: string): IosBuildConfig {
   return {
@@ -81,27 +81,6 @@ function IosConfigItem({
 
       {expanded && (
         <div className="mobile-card-body">
-          <div className="pf-field pf-field--row">
-            <label className="pf-field pf-field--inline">
-              <span>Scheme</span>
-              <input
-                type="text"
-                placeholder="MyApp"
-                value={config.scheme}
-                onChange={(e) => set('scheme', e.target.value)}
-              />
-            </label>
-            <label className="pf-field pf-field--inline">
-              <span>Configuration</span>
-              <input
-                type="text"
-                placeholder="Debug"
-                value={config.configuration}
-                onChange={(e) => set('configuration', e.target.value)}
-              />
-            </label>
-          </div>
-
           <BuildConfigEditor
             entries={config.customFlags}
             onChange={(flags) => set('customFlags', flags)}
@@ -161,21 +140,25 @@ export function IosSettingsSection({
           className="variant-detect-btn variant-detect-btn--deep"
           disabled={!projectPath.trim() || introspecting}
           onClick={detect}
-          title="Read bundle IDs from the Xcode project"
+          title="Read workspace, bundle IDs, and signing from the Xcode project"
         >
           <span className={introspecting ? 'variant-spin' : ''}>⟳</span> Detect
         </button>
-        {introspect && <div className="variant-detect-status">{introspect.bundleIds.length} bundle id(s) found</div>}
+        {introspect && (
+          <div className="variant-detect-status">
+            {introspect.iosWorkspaces.length} workspace(s) · {introspect.bundleIds.length} bundle id(s) · {introspect.iosTeamIds.length} team(s)
+          </div>
+        )}
       </div>
 
       <label className="pf-field">
-        <span>Workspace / Project path <small>(relative to project root)</small></span>
-        <input
-          type="text"
+        <span>Workspace / Project path <small>(detected — relative to project root)</small></span>
+        <SelectInput
           className="pf-mono"
           placeholder="MyApp.xcworkspace"
           value={workspace}
-          onChange={(e) => onWorkspaceChange(e.target.value)}
+          options={introspect?.iosWorkspaces ?? []}
+          onChange={onWorkspaceChange}
         />
       </label>
 
@@ -207,7 +190,7 @@ export function IosSettingsSection({
       <div className="mobile-signing-grid">
         <label className="pf-field">
           <span>Bundle ID</span>
-          <DatalistInput
+          <SelectInput
             className="pf-mono"
             placeholder="com.example.app"
             value={signing.bundleId ?? ''}
@@ -217,21 +200,21 @@ export function IosSettingsSection({
         </label>
         <label className="pf-field">
           <span>Team ID</span>
-          <input
-            type="text"
+          <SelectInput
             className="pf-mono"
             placeholder="ABCDE12345"
             value={signing.teamId ?? ''}
-            onChange={(e) => setSigning('teamId', e.target.value || null)}
+            options={introspect?.iosTeamIds ?? []}
+            onChange={(v) => setSigning('teamId', v || null)}
           />
         </label>
         <label className="pf-field">
           <span>Deployment Target</span>
-          <input
-            type="text"
+          <SelectInput
             placeholder="15.0"
             value={signing.deploymentTarget ?? ''}
-            onChange={(e) => setSigning('deploymentTarget', e.target.value || null)}
+            options={introspect?.iosDeploymentTargets ?? []}
+            onChange={(v) => setSigning('deploymentTarget', v || null)}
           />
         </label>
         <div className="pf-field">
@@ -253,20 +236,20 @@ export function IosSettingsSection({
           <>
             <label className="pf-field">
               <span>Certificate name</span>
-              <input
-                type="text"
+              <SelectInput
                 placeholder="iPhone Distribution: My Company"
                 value={signing.certificateName ?? ''}
-                onChange={(e) => setSigning('certificateName', e.target.value || null)}
+                options={introspect?.iosCertificates ?? []}
+                onChange={(v) => setSigning('certificateName', v || null)}
               />
             </label>
             <label className="pf-field">
               <span>Provisioning profile</span>
-              <input
-                type="text"
+              <SelectInput
                 placeholder="MyApp_AppStore"
                 value={signing.provisioningProfile ?? ''}
-                onChange={(e) => setSigning('provisioningProfile', e.target.value || null)}
+                options={introspect?.iosProvisioningProfiles ?? []}
+                onChange={(v) => setSigning('provisioningProfile', v || null)}
               />
             </label>
           </>

@@ -144,7 +144,7 @@ export function BuildConfigEditor({ entries, onChange, context, label, placehold
 
 // ─── Minify / R8 section ──────────────────────────────────────────────────────
 
-export type MinifyState = { enabled: boolean; r8FullMode: boolean; proguardFiles: string[] };
+export type MinifyState = { enabled: boolean; proguardFiles: string[] };
 
 interface MinifyProps {
   value: MinifyState;
@@ -167,14 +167,8 @@ export function MinifySection({ value, onChange }: MinifyProps) {
       <div className="minify-toggles">
         <label className="minify-opt">
           <input type="checkbox" checked={value.enabled} onChange={(e) => set('enabled', e.target.checked)} />
-          <span>Enable R8 / ProGuard</span>
+          <span>Enable R8</span>
         </label>
-        {value.enabled && (
-          <label className="minify-opt">
-            <input type="checkbox" checked={value.r8FullMode} onChange={(e) => set('r8FullMode', e.target.checked)} />
-            <span>R8 Full Mode</span>
-          </label>
-        )}
       </div>
       {value.enabled && (
         <div className="minify-proguard">

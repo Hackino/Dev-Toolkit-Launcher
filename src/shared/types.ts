@@ -176,8 +176,7 @@ export type BuildFlagEntry = {
 // ─── Android build configuration ─────────────────────────────────────────────
 
 export type MinifyConfig = {
-  enabled: boolean;
-  r8FullMode: boolean;
+  enabled: boolean;         // R8 / ProGuard code shrinking
   proguardFiles: string[];  // paths relative to project root, e.g. "proguard-rules.pro"
 };
 
@@ -187,6 +186,8 @@ export type AndroidBuildConfig = {
   buildType: string;        // debug | release | <custom>
   flavor: string | null;
   isDefault: boolean;
+  debuggable: boolean;      // builds the variant as debuggable
+  signingConfig: string | null;  // name of the gradle signingConfig this variant uses
   minify: MinifyConfig;
   customFlags: BuildFlagEntry[];
 };
@@ -405,12 +406,27 @@ export type SigningConfigInfo = {
   keyPasswordEnv: string | null;
 };
 
+/** Per-buildType settings parsed from the module's build.gradle (read-only in the UI). */
+export type AndroidBuildTypeInfo = {
+  name: string;                  // "debug", "release", "staging", …
+  debuggable: boolean;
+  minifyEnabled: boolean;
+  signingConfig: string | null;  // referenced signingConfigs.<name>
+  proguardFiles: string[];
+};
+
 export type MobileIntrospection = {
   gradleModules: string[];
   applicationIds: string[];
   bundleIds: string[];
   signingConfigs: SigningConfigInfo[];
+  buildTypeConfigs: AndroidBuildTypeInfo[];  // detected per-buildType settings
   kmpTargets: KmpTarget[];        // KMP build targets declared in the module's build.gradle.kts
+  iosWorkspaces: string[];        // detected .xcworkspace / .xcodeproj paths (relative to project root)
+  iosTeamIds: string[];           // DEVELOPMENT_TEAM values from the Xcode project
+  iosDeploymentTargets: string[]; // IPHONEOS_DEPLOYMENT_TARGET values
+  iosCertificates: string[];      // CODE_SIGN_IDENTITY values
+  iosProvisioningProfiles: string[]; // PROVISIONING_PROFILE_SPECIFIER values
   warnings: string[];
 };
 

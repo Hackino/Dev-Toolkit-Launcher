@@ -77,8 +77,11 @@ export function extractBlock(source: string, blockName: string): string | null {
 function childContainerNames(blockBody: string): string[] {
   const names: string[] = [];
 
-  // Kotlin-DSL factory calls — anywhere in the block.
-  const factoryRe = /(?:create|register|maybeCreate|getByName)\s*\(\s*["']([A-Za-z0-9_]+)["']/g;
+  // Kotlin-DSL factory declarations — only those that open a body, e.g.
+  // `create("staging") {` / `getByName("release") {`. This excludes reference
+  // uses like `signingConfig = signingConfigs.getByName("…")` inside a build type,
+  // which must NOT be treated as a separate variant.
+  const factoryRe = /(?:create|register|maybeCreate|getByName)\s*\(\s*["']([A-Za-z0-9_]+)["']\s*\)\s*\{/g;
   for (let m = factoryRe.exec(blockBody); m; m = factoryRe.exec(blockBody)) {
     names.push(m[1]);
   }
@@ -208,7 +211,7 @@ function parseFlutterEntryPoints(projectPath: string, result: DetectedVariants):
 // ─── iOS static parse ─────────────────────────────────────────────────────────
 
 export function findIosRoot(projectPath: string): string | null {
-  const candidates = [projectPath, join(projectPath, 'ios')];
+  const candidates = [projectPath, join(projectPath, 'ios'), join(projectPath, 'iosApp')];
   for (const dir of candidates) {
     if (!existsSync(dir)) continue;
     try {
@@ -270,11 +273,19 @@ async function deepScanAndroid(projectPath: string, module: string, result: Dete
     );
     const variants = new Set<string>();
     const buildTypes = new Set<string>(result.androidBuildTypes);
+    // Genuine app variants always end with a real build type (assembleDebug,
+    // assembleProdRelease, …). KMP modules also expose tasks like
+    // assembleReleaseXCFramework / assembleSharedDebugMetadata — exclude those.
+    const knownBuildTypes = [...buildTypes].map((b) => b.toLowerCase());
+    const JUNK = /xcframework|framework|metadata|kotlin|aar|androidtest$|unittest$|test$/;
     const re = /^assemble([A-Za-z0-9]+)\b/gm;
     for (let m = re.exec(stdout); m; m = re.exec(stdout)) {
       const variant = m[1];
-      // Skip the bare "assemble" aggregate and test tasks.
-      if (!variant || /AndroidTest$|UnitTest$/.test(variant)) continue;
+      if (!variant) continue;
+      const lower = variant.toLowerCase();
+      if (JUNK.test(lower)) continue;
+      // Keep only tasks that resolve to a known build type.
+      if (!knownBuildTypes.some((bt) => lower.endsWith(bt))) continue;
       variants.add(variant[0].toLowerCase() + variant.slice(1));
     }
     if (variants.size > 0) {

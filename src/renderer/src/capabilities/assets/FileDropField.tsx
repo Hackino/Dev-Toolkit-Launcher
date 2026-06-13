@@ -88,6 +88,12 @@ export function FileDropField({ label, value, projectPath, platform, kind, filte
     }
   }, [hasPath, projectPath, platform, kind, onChange]);
 
+  const openFile = useCallback(() => {
+    if (!value || !hasPath) return;
+    const root = projectPath.replace(/[\\/]+$/, '');
+    void window.launcher.openPath(`${root}/${value}`);
+  }, [value, hasPath, projectPath]);
+
   const browse = useCallback(async () => {
     if (!hasPath) { setStatus({ kind: 'error', message: 'Set the project path first.' }); return; }
     const picked = await window.launcher.mobilePickFile({
@@ -118,6 +124,9 @@ export function FileDropField({ label, value, projectPath, platform, kind, filte
         <div className="drop-zone-actions">
           <button type="button" className="variant-detect-btn" onClick={autodetect} disabled={!hasPath}>⚡ Auto-detect</button>
           <button type="button" className="variant-detect-btn" onClick={browse} disabled={!hasPath}>📁 Browse</button>
+          {value && (
+            <button type="button" className="variant-detect-btn" onClick={openFile} title="Open the detected file">👁 Open</button>
+          )}
           {value && (
             <button type="button" className="variant-detect-btn drop-zone-clear" onClick={() => { lastValidated.current = ''; onChange(''); setStatus({ kind: 'idle' }); }}>✕</button>
           )}

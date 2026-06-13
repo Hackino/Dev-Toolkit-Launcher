@@ -1,7 +1,7 @@
 import type { KmpTarget } from '../../../../shared/types';
 import { KMP_TARGET_LABELS } from '../../../../shared/types';
 import { useIntrospection } from '../../capabilities/detection/useIntrospection';
-import { DatalistInput } from '../../capabilities/detection/DatalistInput';
+import { SelectInput } from '../../capabilities/detection/SelectInput';
 
 const ALL_TARGETS: KmpTarget[] = ['android', 'ios', 'desktop', 'web'];
 
@@ -63,7 +63,7 @@ export function ComposeMultiplatformSection({
 
       <label className="pf-field">
         <span>Gradle module</span>
-        <DatalistInput
+        <SelectInput
           className="pf-mono"
           placeholder="composeApp"
           value={module}

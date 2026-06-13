@@ -77,7 +77,7 @@ type Tab = MobileTabKey;
 interface Props {
   workspaceId: string;
   editingProject?: ProjectConfig | null;
-  onSaved: () => void;
+  onSaved: () => void | Promise<void>;
   onCancel: () => void;
 }
 
@@ -91,6 +91,7 @@ export default function MobileFormPanel({ workspaceId, editingProject, onSaved, 
   const [activeTab, setActiveTab] = useState<Tab>('platform');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<{ kind: 'saving' | 'ok' | 'error'; message: string } | null>(null);
 
   // Hydrate the form from the saved config + firebase when editing an existing project.
   useEffect(() => {
@@ -161,6 +162,7 @@ export default function MobileFormPanel({ workspaceId, editingProject, onSaved, 
     if (!state.path.trim()) { setError('Project path is required'); return; }
     setSaving(true);
     setError(null);
+    setSaveStatus({ kind: 'saving', message: 'Saving settings…' });
     try {
       let projectId: string;
       if (isEdit) {
@@ -209,9 +211,14 @@ export default function MobileFormPanel({ workspaceId, editingProject, onSaved, 
         });
       }
 
-      onSaved();
+      // Refresh the parent list but keep the editor open.
+      await onSaved();
+      setSaveStatus({ kind: 'ok', message: 'Settings saved' });
+      window.setTimeout(() => setSaveStatus((s) => (s?.kind === 'ok' ? null : s)), 2500);
     } catch (e) {
-      setError((e as Error).message ?? String(e));
+      const message = (e as Error).message ?? String(e);
+      setError(message);
+      setSaveStatus({ kind: 'error', message: `Save failed: ${message}` });
     } finally {
       setSaving(false);
     }
@@ -284,13 +291,11 @@ export default function MobileFormPanel({ workspaceId, editingProject, onSaved, 
             applicationId={state.applicationId}
             module={state.androidModule}
             configs={state.androidConfigs}
-            signing={state.androidSigning}
             projectPath={state.path}
             platform={state.platform}
             onApplicationIdChange={(v) => set('applicationId', v)}
             onModuleChange={(v) => set('androidModule', v)}
             onConfigsChange={(v) => set('androidConfigs', v)}
-            onSigningChange={(v) => set('androidSigning', v)}
           />
         )}
 
@@ -351,11 +356,23 @@ export default function MobileFormPanel({ workspaceId, editingProject, onSaved, 
       {error && <div className="wm-error">{error}</div>}
 
       <div className="wm-pe-actions">
-        <button type="button" className="btn ghost" onClick={onCancel} disabled={saving}>Cancel</button>
+        <button type="button" className="btn ghost" onClick={onCancel} disabled={saving}>Close</button>
         <button type="button" className="btn primary" onClick={save} disabled={saving}>
           {saving ? 'Saving…' : isEdit ? 'Save' : 'Add Project'}
         </button>
       </div>
+
+      {saveStatus && (
+        <div className={`save-toast save-toast--${saveStatus.kind}`} role="status" aria-live="polite">
+          <span className="save-toast-icon">
+            {saveStatus.kind === 'saving' ? '⏳' : saveStatus.kind === 'ok' ? '✓' : '⚠'}
+          </span>
+          <span>{saveStatus.message}</span>
+          {saveStatus.kind !== 'saving' && (
+            <button type="button" className="save-toast-close" onClick={() => setSaveStatus(null)} aria-label="Dismiss">✕</button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

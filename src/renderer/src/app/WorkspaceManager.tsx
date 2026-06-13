@@ -555,7 +555,7 @@ export default function WorkspaceManager({ open, onClose, onChanged }: Props) {
                   <MobileFormPanel
                     workspaceId={selectedWsId!}
                     editingProject={editingProject.mode === 'edit' ? editingProject.project : null}
-                    onSaved={async () => { await load(); onChanged(); setEditingProject(null); }}
+                    onSaved={async () => { await load(); onChanged(); }}
                     onCancel={() => setEditingProject(null)}
                   />
                 ) : (
