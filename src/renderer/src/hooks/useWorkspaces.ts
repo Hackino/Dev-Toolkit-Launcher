@@ -57,9 +57,13 @@ export function useWorkspaces() {
   const refreshStatus = useCallback(async () => {
     const snap: StatusSnapshot[] = await window.launcher.statusSnapshot();
     setStatuses((prev) => {
+      let changed = false;
       const next = { ...prev };
-      for (const s of snap) next[s.projectPath] = s.status;
-      return next;
+      for (const s of snap) {
+        if (next[s.projectPath] !== s.status) { next[s.projectPath] = s.status; changed = true; }
+      }
+      // Returning the same reference skips the re-render when nothing changed.
+      return changed ? next : prev;
     });
   }, []);
 

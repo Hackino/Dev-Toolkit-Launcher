@@ -119,6 +119,8 @@ const api: LauncherApi = {
   // Mobile devices & utilities
   mobileListDevices: (args: { projectPath: string }) =>
     ipcRenderer.invoke('mobile:listDevices', args) as Promise<MobileDevice[]>,
+  mobileListAllDevices: (args: { android: boolean; ios: boolean }) =>
+    ipcRenderer.invoke('mobile:listAllDevices', args) as Promise<MobileDevice[]>,
   mobileListEmulators: (args: { projectPath: string }) =>
     ipcRenderer.invoke('mobile:listEmulators', args) as Promise<MobileDevice[]>,
   mobileOpenIde: (args: { projectPath: string }) =>

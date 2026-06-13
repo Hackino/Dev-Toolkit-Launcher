@@ -6,6 +6,11 @@ import { registerMobileIpc } from './app/ipc/mobile';
 import { attachToWindow, stopAllSync } from './capabilities/process/backendProcess';
 import { attachMobileToWindow, stopAllMobileSync } from './capabilities/process/mobileProcess';
 import { getDb, closeDb } from './capabilities/persistence/database';
+import { fixPath } from './capabilities/process/fixPath';
+
+// Load the real shell PATH + Android SDK so adb/flutter/gradle resolve when the
+// app is launched from Finder/Dock (not just from a terminal in dev).
+fixPath();
 
 const DEV_SERVER = process.env.ELECTRON_RENDERER_URL;
 

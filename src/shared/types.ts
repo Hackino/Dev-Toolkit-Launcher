@@ -595,6 +595,7 @@ export type LauncherApi = {
 
   // Mobile devices & utilities
   mobileListDevices: (args: { projectPath: string }) => Promise<MobileDevice[]>;
+  mobileListAllDevices: (args: { android: boolean; ios: boolean }) => Promise<MobileDevice[]>;
   mobileListEmulators: (args: { projectPath: string }) => Promise<MobileDevice[]>;
   mobileOpenIde: (args: MobileTaskRef) => Promise<{ ok: boolean; error?: string }>;
   mobileGetVersionInfo: (args: { projectPath: string }) => Promise<MobileVersionInfo>;

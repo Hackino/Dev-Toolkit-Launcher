@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import type { BackendProjectType, ProjectConfig, MobilePlatform } from '../../shared/types';
 import { isMobileType } from '../../shared/category';
 import { isMultiPlatform, columnTargetsFor, type MobileColumnTarget } from './features/mobileColumnTargets';
@@ -30,8 +30,10 @@ export default function App() {
   } = useWorkspaces();
 
   const terminals = useTerminals();
-  const allProjectsList = Object.values(projects).flat();
-  const deviceMap = useDevices(allProjectsList);
+  // Stable identity so data hooks don't re-fetch on every unrelated re-render
+  // (e.g. the 5s status poll). They reload only when the project set changes.
+  const allProjectsList = useMemo(() => Object.values(projects).flat(), [projects]);
+  const { devices: deviceMap, refresh: detectDevices, detecting: devicesDetecting } = useDevices(allProjectsList);
   const mobileData = useMobile(allProjectsList);
   const { detections } = useBackendProfiles(allProjectsList);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
@@ -203,6 +205,8 @@ export default function App() {
                         mobileConfig={md?.config ?? null}
                         firebase={md?.firebase ?? []}
                         devices={deviceMap[project.path] ?? []}
+                        onDetectDevices={detectDevices}
+                        devicesDetecting={devicesDetecting}
                         status={{ status: tab?.status ?? 'idle', lastExitCode: tab?.lastExitCode ?? null }}
                         busy={!!busy[project.path]}
                         lastBuild={md?.lastBuild ?? null}

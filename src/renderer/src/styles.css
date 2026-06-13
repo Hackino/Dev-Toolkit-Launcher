@@ -1334,8 +1334,27 @@ html, body, #root {
   font-size: 11px;
   padding: 4px 6px;
 }
-.mobile-selector--device { font-size: 10px; }
+.mobile-selector--device { font-size: 10px; flex: 1; min-width: 0; }
 .mobile-selector:focus { outline: none; border-color: var(--accent); }
+
+/* Device selector + manual detect button */
+.mobile-device-row { display: flex; gap: 4px; align-items: stretch; }
+.mobile-device-detect {
+  flex-shrink: 0;
+  width: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+.mobile-device-detect:hover:not(:disabled) { background: var(--bg-hover); color: var(--fg); border-color: var(--accent); }
+.mobile-device-detect:disabled { opacity: 0.5; cursor: default; }
 
 .mobile-actions {
   display: grid;

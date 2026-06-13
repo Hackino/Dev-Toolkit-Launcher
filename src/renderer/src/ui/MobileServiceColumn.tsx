@@ -33,6 +33,8 @@ interface Props {
   status: { status: ServiceStatus; lastExitCode: number | null };
   busy: boolean;
   lastBuild: MobileBuildRecord | null;
+  onDetectDevices: () => void;
+  devicesDetecting: boolean;
   onOpenTerminal: (key: string, name: string) => void;
   onLog: (key: string, stream: LogStream, line: string) => void;
   onEdit?: () => void;
@@ -93,6 +95,8 @@ export default function MobileServiceColumn({
   status,
   busy,
   lastBuild,
+  onDetectDevices,
+  devicesDetecting,
   onOpenTerminal,
   onLog,
 }: Props) {
@@ -298,31 +302,43 @@ export default function MobileServiceColumn({
           </select>
         )}
 
-        {/* Device selector (android / ios columns only) — required for Run/Install */}
+        {/* Device selector + manual detect (android / ios columns only) */}
         {usesDevices && (
-          <select
-            className="mobile-selector mobile-selector--device"
-            value={selectedDeviceId ?? ''}
-            onChange={(e) => setSelectedDeviceId(e.target.value || null)}
-            disabled={iosBlocked}
-            title="Target device"
-          >
-            <option value="">{kindDevices.length === 0 ? 'No devices found' : 'No device'}</option>
-            {kindDevices.filter((d) => d.kind === 'device').length > 0 && (
-              <optgroup label="Devices">
-                {kindDevices.filter((d) => d.kind === 'device').map((d) => (
-                  <option key={d.id} value={d.id}>{d.name} ({d.state})</option>
-                ))}
-              </optgroup>
-            )}
-            {kindDevices.filter((d) => d.kind === 'emulator').length > 0 && (
-              <optgroup label="Emulators / Simulators">
-                {kindDevices.filter((d) => d.kind === 'emulator').map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </optgroup>
-            )}
-          </select>
+          <div className="mobile-device-row">
+            <select
+              className="mobile-selector mobile-selector--device"
+              value={selectedDeviceId ?? ''}
+              onChange={(e) => setSelectedDeviceId(e.target.value || null)}
+              disabled={iosBlocked}
+              title="Target device"
+            >
+              <option value="">{kindDevices.length === 0 ? 'No devices — click ⟳' : 'No device'}</option>
+              {kindDevices.filter((d) => d.kind === 'device').length > 0 && (
+                <optgroup label="Devices">
+                  {kindDevices.filter((d) => d.kind === 'device').map((d) => (
+                    <option key={d.id} value={d.id}>{d.name} ({d.state})</option>
+                  ))}
+                </optgroup>
+              )}
+              {kindDevices.filter((d) => d.kind === 'emulator').length > 0 && (
+                <optgroup label="Emulators / Simulators">
+                  {kindDevices.filter((d) => d.kind === 'emulator').map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+            <button
+              type="button"
+              className="mobile-device-detect"
+              onClick={onDetectDevices}
+              disabled={iosBlocked || devicesDetecting}
+              title="Detect connected devices"
+              aria-label="Detect devices"
+            >
+              <span className={devicesDetecting ? 'variant-spin' : ''}>⟳</span>
+            </button>
+          </div>
         )}
       </div>
 

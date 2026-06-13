@@ -1,0 +1,91 @@
+name: Build
+
+# Build portable Windows (.exe) and macOS (.dmg) artifacts.
+# Runs manually only (Actions tab → Build → Run workflow). Optionally tick
+# "create_release" + provide a tag to also publish a GitHub Release.
+on:
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Also publish a GitHub Release'
+        type: boolean
+        default: false
+      tag:
+        description: 'Release tag (e.g. v1.0.0) — only used when publishing'
+        type: string
+        default: ''
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            script: dist:mac
+            artifact: macos-dmg
+            pattern: release/*.dmg
+          - os: windows-latest
+            script: dist:win
+            artifact: windows-portable
+            pattern: release/*.exe
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # postinstall runs electron-rebuild for the native better-sqlite3 module,
+      # building it for the target OS/arch on each runner.
+      - name: Install dependencies
+        run: npm ci
+
+      # Version = yyyy.mm.dd.<build>, where <build> is the GitHub Actions run number.
+      - name: Set version
+        shell: bash
+        run: |
+          VERSION="$(date -u +'%Y.%m.%d').${{ github.run_number }}"
+          node -e "const fs=require('fs');const p=require('./package.json');p.version='$VERSION';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+          echo "Version: $VERSION"
+
+      - name: Build artifact
+        run: npm run ${{ matrix.script }}
+        env:
+          # Produce an unsigned build — no Apple/Windows signing certs required.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.pattern }}
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    if: ${{ inputs.create_release && inputs.tag != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          files: |
+            dist/**/*.dmg
+            dist/**/*.exe
+          fail_on_unmatched_files: false

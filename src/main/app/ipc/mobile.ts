@@ -444,6 +444,20 @@ export function registerMobileIpc(): void {
 
   // ─── Device listing ───────────────────────────────────────────────────────
 
+  // Machine-global device list — called ONCE per poll for all projects (devices
+  // are not project-specific, so listing per-project just wastes CPU on adb/xcrun).
+  ipcMain.handle('mobile:listAllDevices', async (_e, args: { android: boolean; ios: boolean }) => {
+    try {
+      const [android, ios] = await Promise.all([
+        args.android ? listAndroidDevices() : Promise.resolve([]),
+        args.ios && requireMacos() ? listIosDevices() : Promise.resolve([]),
+      ]);
+      return [...android, ...ios];
+    } catch {
+      return [];
+    }
+  });
+
   ipcMain.handle('mobile:listDevices', async (_e, args: MobileTaskRef) => {
     try {
       const project = getProject(args.projectPath);

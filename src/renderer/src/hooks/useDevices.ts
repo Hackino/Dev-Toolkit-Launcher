@@ -1,40 +1,46 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import type { MobileDevice, ProjectConfig } from '../../../shared/types';
 import { isMobileType } from '../../../shared/category';
 
-const POLL_INTERVAL = 4000;
+const IOS_TYPES = ['ios', 'flutter', 'react-native', 'compose-multiplatform'];
 
-export function useDevices(projects: ProjectConfig[]): Record<string, MobileDevice[]> {
+export type DevicesApi = {
+  devices: Record<string, MobileDevice[]>;
+  refresh: () => Promise<void>;
+  detecting: boolean;
+};
+
+/**
+ * On-demand device detection. There is NO background polling — devices are listed
+ * once, machine-globally (one adb + one xcrun call), only when `refresh()` is
+ * called (the column's "Detect" button). The same result is shared across every
+ * project since devices are not project-specific.
+ */
+export function useDevices(projects: ProjectConfig[]): DevicesApi {
   const [devices, setDevices] = useState<Record<string, MobileDevice[]>>({});
+  const [detecting, setDetecting] = useState(false);
   const inFlight = useRef(false);
 
-  const hasMobile = projects.some((p) => isMobileType(p.type));
+  const mobileProjects = useMemo(() => projects.filter((p) => isMobileType(p.type)), [projects]);
+  const needAndroid = mobileProjects.some((p) => p.type !== 'ios');
+  const needIos = mobileProjects.some((p) => IOS_TYPES.includes(p.type));
 
-  const poll = useCallback(async () => {
-    if (inFlight.current || !hasMobile) return;
+  const refresh = useCallback(async () => {
+    if (inFlight.current || mobileProjects.length === 0) return;
     inFlight.current = true;
+    setDetecting(true);
     try {
-      const mobileProjects = projects.filter((p) => isMobileType(p.type));
-      const results = await Promise.all(
-        mobileProjects.map(async (p) => {
-          const devs = await window.launcher.mobileListDevices({ projectPath: p.path });
-          return [p.path, devs] as const;
-        }),
-      );
-      setDevices(Object.fromEntries(results));
+      const all = await window.launcher.mobileListAllDevices({ android: needAndroid, ios: needIos });
+      const map: Record<string, MobileDevice[]> = {};
+      for (const p of mobileProjects) map[p.path] = all;
+      setDevices(map);
     } catch {
-      // silently ignore poll errors
+      // ignore — detection errors leave the previous list in place
     } finally {
       inFlight.current = false;
+      setDetecting(false);
     }
-  }, [projects, hasMobile]);
+  }, [needAndroid, needIos, mobileProjects]);
 
-  useEffect(() => {
-    if (!hasMobile) return;
-    poll();
-    const id = setInterval(poll, POLL_INTERVAL);
-    return () => clearInterval(id);
-  }, [poll, hasMobile]);
-
-  return devices;
+  return { devices, refresh, detecting };
 }
