@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { MobilePlatform } from '../../../../shared/types';
 
 /** Official-style multicolor Firebase flame mark. */
@@ -15,15 +16,24 @@ export function FirebaseLogo({ size = 14 }: { size?: number }) {
 }
 
 export function AndroidLogo({ size = 24 }: { size?: number }) {
+  const green = '#A4C639';
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M17.523 15.341c0 .472-.383.856-.856.856H7.333a.856.856 0 0 1-.856-.856V9.008h11.046v6.333Z" fill="#3DDC84"/>
-      <path d="M6.477 9.008c0-.472.384-.856.856-.856h9.334c.473 0 .856.384.856.856v.5H6.477v-.5Z" fill="#3DDC84"/>
-      <path d="M8.5 7.5 6.8 5.8M15.5 7.5l1.7-1.7" stroke="#3DDC84" strokeWidth="1.5" strokeLinecap="round"/>
-      <circle cx="9.5" cy="11" r="1" fill="#fff"/>
-      <circle cx="14.5" cy="11" r="1" fill="#fff"/>
-      <path d="M8.5 16.2v2.4a.9.9 0 0 0 1.8 0V16.2M13.7 16.2v2.4a.9.9 0 0 0 1.8 0V16.2" stroke="#3DDC84" strokeWidth="1.5" strokeLinecap="round"/>
-      <path d="M4.5 10.2v4.6a.9.9 0 0 0 1.8 0V10.2M17.7 10.2v4.6a.9.9 0 0 0 1.8 0V10.2" stroke="#3DDC84" strokeWidth="1.5" strokeLinecap="round"/>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Android">
+      {/* antennae */}
+      <path d="M8.2 4 6.7 1.8M15.8 4l1.5-2.2" stroke={green} strokeWidth="1.1" strokeLinecap="round"/>
+      {/* head dome (flat bottom) */}
+      <path d="M4.6 9.6a7.4 7.4 0 0 1 14.8 0Z" fill={green}/>
+      {/* eyes */}
+      <circle cx="9.3" cy="6.8" r=".85" fill="#fff"/>
+      <circle cx="14.7" cy="6.8" r=".85" fill="#fff"/>
+      {/* torso */}
+      <rect x="4.6" y="10.3" width="14.8" height="9.4" rx="1.8" fill={green}/>
+      {/* arms */}
+      <rect x="1.9" y="10.7" width="2.3" height="6.7" rx="1.15" fill={green}/>
+      <rect x="19.8" y="10.7" width="2.3" height="6.7" rx="1.15" fill={green}/>
+      {/* legs */}
+      <rect x="7.9" y="18.7" width="2.4" height="4.5" rx="1.2" fill={green}/>
+      <rect x="13.7" y="18.7" width="2.4" height="4.5" rx="1.2" fill={green}/>
     </svg>
   );
 }
@@ -39,10 +49,15 @@ export function IosLogo({ size = 24 }: { size?: number }) {
 
 export function FlutterLogo({ size = 24 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M14.06 2 3 13.06l3.54 3.54L21.59 2H14.06Z" fill="#54C5F8"/>
-      <path d="m6.54 16.6 4.24-4.23 4.24 4.23-4.24 4.24-4.24-4.24Z" fill="#01579B"/>
-      <path d="m10.78 12.37 4.24 4.23-2.12 2.12-4.24-4.23 2.12-2.12Z" fill="#29B6F6"/>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Flutter">
+      {/* upper blade */}
+      <path d="M15.4 1.6 3.9 13.1l3.5 3.5L22.4 1.6h-7Z" fill="#47C5FB"/>
+      {/* lower blade */}
+      <path d="M15.4 12 9.1 18.3l3.5 3.5 3.3-3.3 3-3-3.5-3.5Z" fill="#47C5FB"/>
+      {/* dark fold */}
+      <path d="m12.6 21.8 3.3-3.3 4.5 4.5h-7l-.8-1.2Z" fill="#00569E"/>
+      {/* mid teal */}
+      <path d="m9.1 18.3 3.5-3.5 3.3 3.3-3.3 3.3-3.5-3.1Z" fill="#00B5F8"/>
     </svg>
   );
 }
@@ -59,10 +74,18 @@ export function ReactNativeLogo({ size = 24 }: { size?: number }) {
 }
 
 export function KmpLogo({ size = 24 }: { size?: number }) {
+  // Kotlin Multiplatform mark — the Kotlin gradient silhouette.
+  const gradId = useId();
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 2L2 7v10l10 5 10-5V7L12 2Z" fill="none" stroke="#7F52FF" strokeWidth="1.5"/>
-      <path d="M12 2v20M2 7l10 5M22 7l-10 5" stroke="#7F52FF" strokeWidth="1.2" strokeOpacity="0.7"/>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Compose Multiplatform">
+      <defs>
+        <linearGradient id={gradId} x1="21" y1="3" x2="4" y2="21" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#E44857"/>
+          <stop offset="0.47" stopColor="#C711E1"/>
+          <stop offset="1" stopColor="#7F52FF"/>
+        </linearGradient>
+      </defs>
+      <path d="M21 21 12 12l9-9H3v18h18Z" fill={`url(#${gradId})`}/>
     </svg>
   );
 }
