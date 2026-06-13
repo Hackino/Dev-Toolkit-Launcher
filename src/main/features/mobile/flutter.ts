@@ -26,6 +26,18 @@ function desktopFlutterTarget(): 'macos' | 'windows' | 'linux' {
   return 'linux';
 }
 
+/** Build mode selected via the column's build-configuration dropdown. */
+function selectedMode(ctx: MobileCommandContext): 'debug' | 'profile' | 'release' {
+  const raw =
+    ctx.kmpTarget === 'ios'
+      ? (ctx.iosBuildConfig?.configuration ?? ctx.iosBuildConfig?.name ?? '')
+      : (ctx.androidBuildConfig?.buildType ?? ctx.androidBuildConfig?.name ?? '');
+  const v = raw.toLowerCase();
+  if (v.includes('release')) return 'release';
+  if (v.includes('profile')) return 'profile';
+  return 'debug';
+}
+
 /** `flutter build <sub>` for the column's target (android by default). */
 function buildSubcommand(target: MobileCommandContext['kmpTarget'], release: boolean): string {
   switch (target) {
@@ -42,7 +54,9 @@ const commands: MobileCommands = {
 
   buildCommand(ctx) {
     const ep = ctx.flutterEntryPoint ?? defaultEntry(ctx);
-    return [`flutter ${buildSubcommand(ctx.kmpTarget, false)}`, ...entryFlags(ep, ctx.config.globalFlags)].join(' ');
+    // The build-config dropdown decides debug vs release for the Build button.
+    const release = selectedMode(ctx) === 'release';
+    return [`flutter ${buildSubcommand(ctx.kmpTarget, release)}`, ...entryFlags(ep, ctx.config.globalFlags)].join(' ');
   },
 
   cleanCommand() {
@@ -51,7 +65,11 @@ const commands: MobileCommands = {
 
   runOnDeviceCommand(ctx, deviceId) {
     const ep = ctx.flutterEntryPoint ?? defaultEntry(ctx);
-    return ['flutter run', `-d ${deviceId}`, ...entryFlags(ep, ctx.config.globalFlags)].join(' ');
+    const mode = selectedMode(ctx);
+    const modeFlag = mode === 'release' ? '--release' : mode === 'profile' ? '--profile' : '';
+    return ['flutter run', modeFlag, `-d ${deviceId}`, ...entryFlags(ep, ctx.config.globalFlags)]
+      .filter(Boolean)
+      .join(' ');
   },
 
   runOnEmulatorCommand(ctx, deviceId) {

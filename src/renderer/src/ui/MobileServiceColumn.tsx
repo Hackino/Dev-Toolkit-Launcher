@@ -112,7 +112,8 @@ export default function MobileServiceColumn({
   useEffect(() => {
     if (!mobileConfig) return;
     if (!selectedConfigId) {
-      const def = mobileConfig.androidBuildConfigs.find((c) => c.isDefault) ?? mobileConfig.androidBuildConfigs[0];
+      const cfgs = isIos ? mobileConfig.iosBuildConfigs : mobileConfig.androidBuildConfigs;
+      const def = cfgs.find((c) => c.isDefault) ?? cfgs[0];
       if (def) setSelectedConfigId(def.id);
     }
     if (!selectedEntryId) {
@@ -246,22 +247,8 @@ export default function MobileServiceColumn({
       <div className="column-scroll">
       {/* Selectors row */}
       <div className="mobile-selectors">
-        {/* Flutter entry point */}
-        {platform === 'flutter' && flutterEntries.length > 0 && (
-          <select
-            className="mobile-selector"
-            value={selectedEntryId ?? ''}
-            onChange={(e) => setSelectedEntryId(e.target.value || null)}
-            title="Entry point"
-          >
-            {flutterEntries.map((e) => (
-              <option key={e.id} value={e.id}>{e.name}</option>
-            ))}
-          </select>
-        )}
-
-        {/* Android build config */}
-        {platform !== 'flutter' && kind === 'android' && androidConfigs.length > 0 && (
+        {/* Build configuration — shown for every platform (on top), incl. Flutter */}
+        {kind === 'android' && androidConfigs.length > 0 && (
           <select
             className="mobile-selector"
             value={selectedConfigId ?? ''}
@@ -274,8 +261,7 @@ export default function MobileServiceColumn({
           </select>
         )}
 
-        {/* iOS build config */}
-        {platform !== 'flutter' && kind === 'ios' && iosConfigs.length > 0 && (
+        {kind === 'ios' && iosConfigs.length > 0 && (
           <select
             className="mobile-selector"
             value={selectedConfigId ?? ''}
@@ -285,6 +271,20 @@ export default function MobileServiceColumn({
           >
             {iosConfigs.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        )}
+
+        {/* Flutter entry point */}
+        {platform === 'flutter' && flutterEntries.length > 0 && (
+          <select
+            className="mobile-selector"
+            value={selectedEntryId ?? ''}
+            onChange={(e) => setSelectedEntryId(e.target.value || null)}
+            title="Entry point"
+          >
+            {flutterEntries.map((e) => (
+              <option key={e.id} value={e.id}>{e.name}</option>
             ))}
           </select>
         )}

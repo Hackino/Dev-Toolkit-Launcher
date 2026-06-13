@@ -41,13 +41,21 @@ function emitExit(taskKey: string, code: number | null, status: ServiceStatus): 
   });
 }
 
-function makeLineSplitter(onLine: (line: string) => void): (chunk: Buffer) => void {
+function makeLineSplitter(onLine: (line: string) => void): { push: (chunk: Buffer) => void; flush: () => void } {
   let buf = '';
-  return (chunk: Buffer) => {
-    buf += chunk.toString('utf8');
-    const lines = buf.split('\n');
-    buf = lines.pop() ?? '';
-    for (const line of lines) onLine(line);
+  return {
+    push(chunk: Buffer) {
+      buf += chunk.toString('utf8');
+      // Split on CRLF, lone CR, or LF. Gradle / Flutter emit progress with carriage
+      // returns (no newline); splitting only on '\n' buffered that output forever,
+      // making a building app look frozen at "Launching ... in debug mode...".
+      const parts = buf.split(/\r\n|\r|\n/);
+      buf = parts.pop() ?? '';
+      for (const line of parts) onLine(line);
+    },
+    flush() {
+      if (buf) { onLine(buf); buf = ''; }
+    },
   };
 }
 
@@ -94,14 +102,18 @@ export function runMobileTask(opts: RunMobileTaskOptions): { ok: true; taskId: s
   record.pid = child.pid ?? null;
   record.status = 'running';
 
-  child.stdout?.on('data', makeLineSplitter((line) => emitLog(opts.taskKey, 'stdout', line)));
-  child.stderr?.on('data', makeLineSplitter((line) => emitLog(opts.taskKey, 'stderr', line)));
+  const outSplit = makeLineSplitter((line) => emitLog(opts.taskKey, 'stdout', line));
+  const errSplit = makeLineSplitter((line) => emitLog(opts.taskKey, 'stderr', line));
+  child.stdout?.on('data', outSplit.push);
+  child.stderr?.on('data', errSplit.push);
 
   child.on('error', (err) => {
     emitLog(opts.taskKey, 'launcher', `⚠ Process error: ${err.message}`);
   });
 
   child.on('close', (code) => {
+    outSplit.flush();
+    errSplit.flush();
     const status: ServiceStatus = code === 0 ? 'stopped' : 'crashed';
     record.status = status;
     record.child = null;
