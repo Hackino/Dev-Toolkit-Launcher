@@ -47,19 +47,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Version = yyyy.mm.dd.<build>, where <build> is the GitHub Actions run number.
+      # Version = yyyy.m.d (valid 3-part semver — no leading zeros, semver forbids them).
+      # The build number is appended by electron-builder via BUILD_NUMBER below,
+      # giving a final buildVersion like 2026.6.13.<run> used in the artifact name.
       - name: Set version
         shell: bash
         run: |
-          VERSION="$(date -u +'%Y.%m.%d').${{ github.run_number }}"
-          node -e "const fs=require('fs');const p=require('./package.json');p.version='$VERSION';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
-          echo "Version: $VERSION"
+          node -e "const d=new Date();const fs=require('fs');const p=require('./package.json');p.version=d.getUTCFullYear()+'.'+(d.getUTCMonth()+1)+'.'+d.getUTCDate();fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');console.log('semver version:',p.version)"
+          echo "Artifact version: <version>.${{ github.run_number }}"
 
       - name: Build artifact
         run: npm run ${{ matrix.script }}
         env:
           # Produce an unsigned build — no Apple/Windows signing certs required.
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          # electron-builder reads BUILD_NUMBER → buildVersion = "<version>.<BUILD_NUMBER>".
+          BUILD_NUMBER: ${{ github.run_number }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

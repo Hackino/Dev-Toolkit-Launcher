@@ -23,8 +23,8 @@
     "preview": "electron-vite preview",
     "start": "electron-vite preview",
     "package": "electron-vite build && electron-builder --win --x64",
-    "dist:win": "electron-vite build && electron-builder --win portable",
-    "dist:mac": "electron-vite build && electron-builder --mac dmg",
+    "dist:win": "electron-vite build && electron-builder --win portable --publish never",
+    "dist:mac": "electron-vite build && electron-builder --mac dmg --publish never",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "postinstall": "electron-rebuild -f -w better-sqlite3",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
@@ -78,7 +78,7 @@
       ]
     },
     "portable": {
-      "artifactName": "${productName}-${version}-portable.${ext}"
+      "artifactName": "${productName}-${buildVersion}-portable.${ext}"
     },
     "mac": {
       "target": [
@@ -86,7 +86,7 @@
       ]
     },
     "dmg": {
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "${productName}-${buildVersion}-${arch}.${ext}"
     }
   }
 }
