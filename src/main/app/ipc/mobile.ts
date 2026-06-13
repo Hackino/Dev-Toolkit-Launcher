@@ -28,6 +28,7 @@ import {
   sendMobileTaskInput,
 } from '../../capabilities/process/mobileProcess';
 import { MOBILE_SCRIPTS } from '../../capabilities/process/mobileScripts';
+import { harvestToOutput, listOutputArtifacts, type ArtifactPlatform } from '../../capabilities/artifacts/mobileArtifacts';
 import { resolveEnvFlags } from '../../capabilities/buildflags/buildFlagResolver';
 import {
   listAndroidDevices,
@@ -78,15 +79,52 @@ function buildContext(projectPath: string, args: MobileBuildArgs, resolvedEnv: R
   const flutterEntryPoint = args.entryPointId
     ? (config.flutterEntryPoints.find((e) => e.id === args.entryPointId) ?? null)
     : (config.flutterEntryPoints.find((e) => e.isDefault) ?? config.flutterEntryPoints[0] ?? null);
+
+  // If no application ID is configured, detect it from the project so the
+  // post-install launch step (adb monkey -p <appId>) still fires.
+  let effectiveConfig = config;
+  if (!config.applicationId && project.type !== 'ios') {
+    try {
+      const intro = introspectProject(projectPath, project.type as MobilePlatform, config.androidModule || 'app');
+      if (intro.applicationIds[0]) effectiveConfig = { ...config, applicationId: intro.applicationIds[0] };
+    } catch { /* detection optional */ }
+  }
+
   return {
     projectPath,
-    config,
+    config: effectiveConfig,
     androidBuildConfig,
     iosBuildConfig,
     flutterEntryPoint,
     kmpTarget: args.kmpTarget ?? null,
     resolvedEnv,
   };
+}
+
+/** After a successful build, copy produced artifacts into <root>/output and record it. */
+function harvestArtifacts(
+  code: number | null,
+  project: ReturnType<typeof getProject>,
+  ctx: ReturnType<typeof buildContext>,
+  args: MobileBuildArgs,
+  startedAt: number,
+): void {
+  if (code !== 0) return;
+  const platform: ArtifactPlatform =
+    project.type === 'ios' || args.kmpTarget === 'ios' ? 'ios' : 'android';
+  const copied = harvestToOutput(args.projectPath, platform, startedAt);
+  const main = copied[0] ?? null;
+  if (!main) return;
+  try {
+    MobileBuildHistoryRepository.record({
+      projectId: project.id,
+      configName: ctx.androidBuildConfig?.name ?? ctx.iosBuildConfig?.name ?? null,
+      kmpTarget: args.kmpTarget ?? null,
+      artifactPath: main,
+      sizeBytes: statSync(main).size,
+      status: 'success',
+    });
+  } catch { /* ignore — artifact may have moved */ }
 }
 
 function resolveSigningEnv(config: ReturnType<typeof getMobileConfig>): Record<string, string> {
@@ -131,12 +169,14 @@ export function registerMobileIpc(): void {
       const command = strategy.buildCommand(ctx);
       // Env-kind global flags
       const extraEnv = resolveEnvFlags(ctx.config.globalFlags);
+      const startedAt = Date.now();
       return runMobileTask({
         taskKey: args.runKey ?? args.projectPath,
         command,
         displayCommand: command,
         cwd: args.projectPath,
         env: extraEnv,
+        onComplete: (code) => harvestArtifacts(code, project, ctx, args, startedAt),
       });
     } catch (err) {
       return { ok: false, error: String(err) };
@@ -223,25 +263,17 @@ export function registerMobileIpc(): void {
         displayCommand = displayCommand.replace(resolvedEnv[androidSigning.keyPasswordEnv], '***');
       }
 
-      const result = runMobileTask({ taskKey: args.runKey ?? args.projectPath, command, displayCommand, cwd: args.projectPath, env: resolvedEnv });
-      if (!result.ok) return result;
-
-      const artifactPath = strategy.expectedArtifactPath(ctx);
-      // Record build history when complete (artifact size computed after task exits)
-      const configName = ctx.androidBuildConfig?.name ?? ctx.iosBuildConfig?.name ?? null;
-      try {
-        const size = artifactPath ? statSync(artifactPath).size : null;
-        MobileBuildHistoryRepository.record({
-          projectId: project.id,
-          configName,
-          kmpTarget: args.kmpTarget ?? null,
-          artifactPath,
-          sizeBytes: size,
-          status: 'success',
-        });
-      } catch { /* ignore — artifact may not exist yet */ }
-
-      return artifactPath ? { ok: true, artifactPath } : { ok: true as const, taskId: args.projectPath };
+      const startedAt = Date.now();
+      const result = runMobileTask({
+        taskKey: args.runKey ?? args.projectPath,
+        command,
+        displayCommand,
+        cwd: args.projectPath,
+        env: resolvedEnv,
+        // After the bundle/archive finishes, copy the artifact into <root>/output and record it.
+        onComplete: (code) => harvestArtifacts(code, project, ctx, args, startedAt),
+      });
+      return result;
     } catch (err) {
       return { ok: false, error: String(err) };
     }
@@ -268,6 +300,16 @@ export function registerMobileIpc(): void {
 
       if (lower.endsWith('.apk')) {
         const command = `adb -s ${args.deviceId} install -r "${file}"`;
+        return runMobileTask({ taskKey, command, displayCommand: command, cwd: args.projectPath });
+      }
+
+      // iOS: .ipa onto a physical device (devicectl), .app onto a simulator (simctl).
+      if (lower.endsWith('.ipa')) {
+        const command = `xcrun devicectl device install app --device ${args.deviceId} "${file}"`;
+        return runMobileTask({ taskKey, command, displayCommand: command, cwd: args.projectPath });
+      }
+      if (lower.endsWith('.app')) {
+        const command = `xcrun simctl install ${args.deviceId} "${file}"`;
         return runMobileTask({ taskKey, command, displayCommand: command, cwd: args.projectPath });
       }
 
@@ -304,9 +346,32 @@ export function registerMobileIpc(): void {
         return runMobileTask({ taskKey, command, displayCommand, cwd: args.projectPath });
       }
 
-      return { ok: false, error: 'Unsupported file — select an .apk or .aab' };
+      return { ok: false, error: 'Unsupported file — select an .apk / .aab / .ipa' };
     } catch (err) {
       return { ok: false, error: String(err) };
+    }
+  });
+
+  // ─── Uninstall (resolves INSTALL_FAILED_VERSION_DOWNGRADE) ──────────────────
+
+  ipcMain.handle('mobile:uninstall', (_e, args: MobileTaskRef & { deviceId: string; packageId: string }) => {
+    try {
+      if (!args.deviceId) return { ok: false, error: 'Select a device first' };
+      if (!args.packageId) return { ok: false, error: 'No application ID configured to uninstall.' };
+      const command = `adb -s ${args.deviceId} uninstall ${args.packageId}`;
+      return runMobileTask({ taskKey: args.runKey ?? args.projectPath, command, displayCommand: command, cwd: args.projectPath });
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
+  // ─── Output artifacts (for the custom install dialog) ───────────────────────
+
+  ipcMain.handle('mobile:listOutputArtifacts', (_e, args: { projectPath: string; exts: string[] }) => {
+    try {
+      return listOutputArtifacts(args.projectPath, args.exts);
+    } catch {
+      return [];
     }
   });
 

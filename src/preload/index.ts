@@ -101,6 +101,10 @@ const api: LauncherApi = {
     ipcRenderer.invoke('mobile:installArtifact', args) as ReturnType<LauncherApi['mobileInstallArtifact']>,
   mobileAdbShell: (args: { projectPath: string; deviceId: string; command: string }) =>
     ipcRenderer.invoke('mobile:adbShell', args) as ReturnType<LauncherApi['mobileAdbShell']>,
+  mobileUninstall: (args: { projectPath: string; runKey?: string; deviceId: string; packageId: string }) =>
+    ipcRenderer.invoke('mobile:uninstall', args) as ReturnType<LauncherApi['mobileUninstall']>,
+  mobileListOutputArtifacts: (args: { projectPath: string; exts: string[] }) =>
+    ipcRenderer.invoke('mobile:listOutputArtifacts', args) as ReturnType<LauncherApi['mobileListOutputArtifacts']>,
   mobilePubGet: (args: { projectPath: string }) =>
     ipcRenderer.invoke('mobile:pubGet', args) as ReturnType<LauncherApi['mobilePubGet']>,
   mobileFlutterDoctor: (args: { projectPath: string }) =>

@@ -61,9 +61,10 @@ const commands: MobileCommands = {
       const mod = ctx.config.androidModule || ctx.config.kmpModule || 'composeApp';
       const installCmd = [gradlewBin(ctx.projectPath), `:${mod}:installDebug`, ...gradleFlags(ctx)].join(' ');
       const appId = ctx.config.applicationId ?? '';
-      return appId
-        ? `${installCmd} && adb -s ${deviceId} shell am start -n ${appId}/.MainActivity`
-        : installCmd;
+      if (!appId) return installCmd;
+      const launch = `adb -s ${deviceId} shell monkey -p ${appId} -c android.intent.category.LAUNCHER 1`;
+      const logcat = `adb -s ${deviceId} logcat --pid=$(adb -s ${deviceId} shell pidof ${appId} 2>/dev/null || echo 0)`;
+      return `${installCmd} && ${launch} && echo "── following logcat for ${appId} (press Stop to end) ──" && sleep 2 && ${logcat}`;
     }
     return commands.buildCommand(ctx);
   },

@@ -10,6 +10,7 @@ import type {
   FirebaseConfig,
   LogStream,
   MobileScriptAction,
+  OutputArtifact,
 } from '../../../shared/types';
 import { MOBILE_PLATFORM_LABELS } from '../../../shared/types';
 import { PlatformLogo, FirebaseLogo } from '../capabilities/logos/mobileLogos';
@@ -107,6 +108,7 @@ export default function MobileServiceColumn({
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [taskBusy, setTaskBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [installModal, setInstallModal] = useState<{ artifacts: OutputArtifact[]; selected: string | null } | null>(null);
 
   // Set defaults from config
   useEffect(() => {
@@ -170,6 +172,13 @@ export default function MobileServiceColumn({
   const doClean = () => run(() => window.launcher.mobileClean({ projectPath: project.path, runKey }));
   const primaryRun = kind === 'android' ? doRunDevice : doRunEmu;
 
+  // Uninstall the app from the selected device — clears INSTALL_FAILED_VERSION_DOWNGRADE.
+  const appId = mobileConfig?.applicationId ?? '';
+  const doUninstall = () => {
+    if (!selectedDeviceId || !appId) return;
+    void run(() => window.launcher.mobileUninstall({ projectPath: project.path, deviceId: selectedDeviceId, packageId: appId, runKey }));
+  };
+
   // Predefined tooling scripts (codegen, pods, gradle, …) stream to this terminal.
   const script = (action: MobileScriptAction) =>
     run(() => window.launcher.mobileRunScript({ projectPath: project.path, runKey, action }));
@@ -180,21 +189,21 @@ export default function MobileServiceColumn({
     void window.launcher.mobileSendInput({ projectPath: project.path, runKey, input });
   };
 
-  // Install: pick an .apk/.aab from disk, then install onto the selected device.
-  // .aab is converted + installed via bundletool (downloaded on first use).
+  // Install: open a custom dialog listing this platform's artifacts in output/
+  // (Android: apk + aab, iOS: ipa), then install the selected one onto the device.
   const doInstall = async () => {
     if (!selectedDeviceId) return;
-    const file = await window.launcher.mobilePickFile({
-      title: 'Select APK or AAB to install',
-      defaultPath: lastBuild?.lastArtifactPath ?? undefined,
-      filters: [
-        { name: 'Android package', extensions: ['apk', 'aab'] },
-        { name: 'All Files', extensions: ['*'] },
-      ],
-    });
-    if (!file) return;
+    const exts = isIos ? ['ipa'] : ['apk', 'aab'];
+    const artifacts = await window.launcher.mobileListOutputArtifacts({ projectPath: project.path, exts });
+    setInstallModal({ artifacts, selected: artifacts[0]?.path ?? null });
+  };
+
+  const confirmInstall = async () => {
+    const artifactPath = installModal?.selected;
+    setInstallModal(null);
+    if (!artifactPath || !selectedDeviceId) return;
     await run(() =>
-      window.launcher.mobileInstallArtifact({ projectPath: project.path, deviceId: selectedDeviceId, artifactPath: file, runKey }),
+      window.launcher.mobileInstallArtifact({ projectPath: project.path, deviceId: selectedDeviceId, artifactPath, runKey }),
     );
   };
 
@@ -343,12 +352,20 @@ export default function MobileServiceColumn({
 
       {/* Secondary actions row */}
       <div className="mobile-actions mobile-actions--row2">
-        {kind === 'android' && (
+        {usesDevices && (
           <ActionButton
             label="📥 Install"
-            disabled={taskBusy || !selectedDeviceId}
-            title={!selectedDeviceId ? 'Select a device first' : 'Choose an .apk / .aab to install on the device'}
+            disabled={taskBusy || !selectedDeviceId || iosBlocked}
+            title={!selectedDeviceId ? 'Select a device first' : `Pick a${isIos ? 'n .ipa' : 'n .apk / .aab'} from output/ to install`}
             onClick={doInstall}
+          />
+        )}
+        {kind === 'android' && (
+          <ActionButton
+            label="🗑 Uninstall"
+            disabled={taskBusy || !selectedDeviceId || !appId}
+            title={!selectedDeviceId ? 'Select a device first' : !appId ? 'No application ID configured' : `Uninstall ${appId} from the device (fixes version-downgrade install errors)`}
+            onClick={doUninstall}
           />
         )}
         {platform === 'flutter' && (
@@ -472,6 +489,51 @@ export default function MobileServiceColumn({
         </div>
       )}
       </div>
+
+      {/* Install dialog — lists artifacts from output/ for this platform */}
+      {installModal && (
+        <div className="install-modal-overlay" onClick={() => setInstallModal(null)}>
+          <div className="install-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="install-modal-title">
+              Install {isIos ? 'iOS app' : 'Android package'}
+            </div>
+            {installModal.artifacts.length === 0 ? (
+              <div className="install-modal-empty">
+                No artifacts found in <code>output/</code>.
+                <span>Build or Bundle first to produce {isIos ? 'an .ipa' : 'an .apk / .aab'}.</span>
+              </div>
+            ) : (
+              <div className="install-modal-list">
+                {installModal.artifacts.map((a) => (
+                  <label key={a.path} className={`install-modal-item ${installModal.selected === a.path ? 'selected' : ''}`}>
+                    <input
+                      type="radio"
+                      name={`artifact-${runKey}`}
+                      checked={installModal.selected === a.path}
+                      onChange={() => setInstallModal((m) => (m ? { ...m, selected: a.path } : m))}
+                    />
+                    <span className="install-modal-name" title={a.path}>{a.name}</span>
+                    <span className="install-modal-size">{sizeDisplay(a.sizeBytes)}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+            <div className="install-modal-actions">
+              <button type="button" className="btn ghost" onClick={() => setInstallModal(null)}>Cancel</button>
+              {installModal.artifacts.length > 0 && (
+                <button
+                  type="button"
+                  className="btn primary"
+                  disabled={!installModal.selected}
+                  onClick={confirmInstall}
+                >
+                  📥 Install
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

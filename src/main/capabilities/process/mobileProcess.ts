@@ -65,6 +65,7 @@ export type RunMobileTaskOptions = {
   displayCommand: string; // potentially redacted version for the log
   cwd: string;            // filesystem working directory (the real project path)
   env?: Record<string, string>;
+  onComplete?: (code: number | null) => void;  // runs after the process exits
 };
 
 export function runMobileTask(opts: RunMobileTaskOptions): { ok: true; taskId: string } | { ok: false; error: string } {
@@ -119,6 +120,7 @@ export function runMobileTask(opts: RunMobileTaskOptions): { ok: true; taskId: s
     record.child = null;
     emitExit(opts.taskKey, code, status);
     emitLog(opts.taskKey, 'launcher', `⏹ Process exited with code ${code ?? '?'}`);
+    try { opts.onComplete?.(code); } catch (err) { emitLog(opts.taskKey, 'launcher', `⚠ Post-build step failed: ${String(err)}`); }
   });
 
   return { ok: true, taskId: opts.taskKey };

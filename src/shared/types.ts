@@ -351,6 +351,9 @@ export type MobileRunArgs = MobileBuildArgs & { deviceId: string };
 /** Common shape for mobile task actions that target a specific worker/terminal. */
 export type MobileTaskRef = { projectPath: string; runKey?: string };
 
+/** A built artifact sitting in the project's output/ folder. */
+export type OutputArtifact = { name: string; path: string; sizeBytes: number };
+
 /** Predefined one-shot tooling actions runnable from a mobile column. */
 export type MobileScriptAction =
   | 'gen-rebuild' | 'gen-build' | 'gen-watch' | 'gen-clean' | 'gen-l10n'
@@ -582,6 +585,8 @@ export type LauncherApi = {
   /** Install an .apk or .aab onto a device. .aab is converted+installed via bundletool (auto-downloaded if missing). */
   mobileInstallArtifact: (args: MobileTaskRef & { deviceId: string; artifactPath: string }) => Promise<MobileActionResult>;
   mobileAdbShell: (args: MobileTaskRef & { deviceId: string; command: string }) => Promise<MobileActionResult>;
+  mobileUninstall: (args: MobileTaskRef & { deviceId: string; packageId: string }) => Promise<MobileActionResult>;
+  mobileListOutputArtifacts: (args: { projectPath: string; exts: string[] }) => Promise<OutputArtifact[]>;
   mobilePubGet: (args: MobileTaskRef) => Promise<MobileActionResult>;
   mobileFlutterDoctor: (args: MobileTaskRef) => Promise<MobileActionResult>;
   mobileViewLogs: (args: MobileTaskRef & { deviceId?: string | null }) => Promise<MobileActionResult>;

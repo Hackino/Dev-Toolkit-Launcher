@@ -41,7 +41,14 @@ const commands: MobileCommands = {
     const installCmd = [gradlewBin(ctx.projectPath), task, ...buildFlags(ctx)].join(' ');
     const appId = ctx.config.applicationId ?? '';
     if (!appId) return installCmd;
-    return `${installCmd} && adb -s ${deviceId} shell am start -n ${appId}/.MainActivity`;
+    // `monkey` launches the app's default LAUNCHER activity without needing to
+    // know its class name (the old `am start -n appId/.MainActivity` guess broke
+    // for any app whose entry activity isn't literally `.MainActivity`).
+    const launch = `adb -s ${deviceId} shell monkey -p ${appId} -c android.intent.category.LAUNCHER 1`;
+    // Keep the run alive by following the app's logcat (Stop ends it). Without
+    // this the task exits right after launch and the column shows "disconnected".
+    const logcat = `adb -s ${deviceId} logcat --pid=$(adb -s ${deviceId} shell pidof ${appId} 2>/dev/null || echo 0)`;
+    return `${installCmd} && ${launch} && echo "── following logcat for ${appId} (press Stop to end) ──" && sleep 2 && ${logcat}`;
   },
 
   runOnEmulatorCommand(ctx, deviceId) {
