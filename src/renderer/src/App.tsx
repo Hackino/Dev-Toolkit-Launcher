@@ -159,13 +159,16 @@ export default function App() {
           }
         }
 
-        const totalCols = Math.max(specs.length, 6);
         const emptyCols = specs.length < 6 ? 6 - specs.length : 0;
+        const isEmptyBoard = workspaces.length === 0 || activeProjects.length === 0;
+        // A single-row column-flow grid: every column stays in one row and an
+        // expanded column simply widens the row (horizontal scroll) — it never
+        // pushes a sibling onto a new row.
+        const columnsStyle = isEmptyBoard
+          ? { gridTemplateColumns: '1fr' as const }
+          : { gridAutoFlow: 'column' as const, gridAutoColumns: 'calc(100% / 5.5)' };
         return (
-          <div
-            className="columns"
-            style={{ gridTemplateColumns: `repeat(${totalCols}, calc(100% / 5.5))` }}
-          >
+          <div className="columns" style={columnsStyle}>
             {workspaces.length === 0 ? (
               <div className="empty" style={{ gridColumn: '1 / -1' }}>
                 No workspaces yet.{' '}

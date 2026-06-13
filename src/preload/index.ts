@@ -16,6 +16,7 @@ import type {
   MobileConfigInput,
   MobileDevice,
   MobileRunArgs,
+  MobileScriptAction,
   MobileVersionInfo,
   ProjectConfig,
   ProjectCreateInput,
@@ -104,6 +105,10 @@ const api: LauncherApi = {
     ipcRenderer.invoke('mobile:pubGet', args) as ReturnType<LauncherApi['mobilePubGet']>,
   mobileFlutterDoctor: (args: { projectPath: string }) =>
     ipcRenderer.invoke('mobile:flutterDoctor', args) as ReturnType<LauncherApi['mobileFlutterDoctor']>,
+  mobileRunScript: (args: { projectPath: string; runKey?: string; action: MobileScriptAction }) =>
+    ipcRenderer.invoke('mobile:runScript', args) as ReturnType<LauncherApi['mobileRunScript']>,
+  mobileSendInput: (args: { projectPath: string; runKey?: string; input: string }) =>
+    ipcRenderer.invoke('mobile:sendInput', args) as ReturnType<LauncherApi['mobileSendInput']>,
   mobileViewLogs: (args: { projectPath: string; deviceId?: string | null }) =>
     ipcRenderer.invoke('mobile:viewLogs', args) as ReturnType<LauncherApi['mobileViewLogs']>,
 

@@ -351,6 +351,14 @@ export type MobileRunArgs = MobileBuildArgs & { deviceId: string };
 /** Common shape for mobile task actions that target a specific worker/terminal. */
 export type MobileTaskRef = { projectPath: string; runKey?: string };
 
+/** Predefined one-shot tooling actions runnable from a mobile column. */
+export type MobileScriptAction =
+  | 'gen-rebuild' | 'gen-build' | 'gen-watch' | 'gen-clean' | 'gen-l10n'
+  | 'icons' | 'splash' | 'format' | 'analyze' | 'test'
+  | 'pub-get' | 'pub-upgrade' | 'pub-outdated' | 'doctor'
+  | 'pod-install' | 'pod-update' | 'pod-repo-update' | 'open-xcode' | 'clean-derived'
+  | 'gradle-clean' | 'gradle-deps' | 'gradle-stop';
+
 // ─── Variant / flavor detection ───────────────────────────────────────────────
 
 export type DetectedEntryPoint = { name: string; target: string };
@@ -577,6 +585,8 @@ export type LauncherApi = {
   mobilePubGet: (args: MobileTaskRef) => Promise<MobileActionResult>;
   mobileFlutterDoctor: (args: MobileTaskRef) => Promise<MobileActionResult>;
   mobileViewLogs: (args: MobileTaskRef & { deviceId?: string | null }) => Promise<MobileActionResult>;
+  mobileRunScript: (args: MobileTaskRef & { action: MobileScriptAction }) => Promise<MobileActionResult>;
+  mobileSendInput: (args: MobileTaskRef & { input: string }) => Promise<{ ok: boolean; error?: string }>;
 
   // Mobile devices & utilities
   mobileListDevices: (args: { projectPath: string }) => Promise<MobileDevice[]>;

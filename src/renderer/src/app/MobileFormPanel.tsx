@@ -92,6 +92,10 @@ export default function MobileFormPanel({ workspaceId, editingProject, onSaved, 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<{ kind: 'saving' | 'ok' | 'error'; message: string } | null>(null);
+  // Once a brand-new project has been created, keep editing *that* project
+  // instead of creating another on every save.
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  const existingId = editingProject?.id ?? createdId;
 
   // Hydrate the form from the saved config + firebase when editing an existing project.
   useEffect(() => {
@@ -165,12 +169,12 @@ export default function MobileFormPanel({ workspaceId, editingProject, onSaved, 
     setSaveStatus({ kind: 'saving', message: 'Saving settings…' });
     try {
       let projectId: string;
-      if (isEdit) {
-        await window.launcher.updateProject(editingProject.id, {
+      if (existingId) {
+        await window.launcher.updateProject(existingId, {
           name: state.name.trim(),
           path: state.path.trim(),
         });
-        projectId = editingProject.id;
+        projectId = existingId;
       } else {
         const project = await window.launcher.createProject({
           workspaceId,
@@ -181,6 +185,7 @@ export default function MobileFormPanel({ workspaceId, editingProject, onSaved, 
           runCommand: '',
         });
         projectId = project.id;
+        setCreatedId(project.id);
       }
 
       await window.launcher.saveMobileConfig(projectId, {
@@ -213,7 +218,7 @@ export default function MobileFormPanel({ workspaceId, editingProject, onSaved, 
 
       // Refresh the parent list but keep the editor open.
       await onSaved();
-      setSaveStatus({ kind: 'ok', message: 'Settings saved' });
+      setSaveStatus({ kind: 'ok', message: existingId ? 'Settings saved' : 'Project created' });
       window.setTimeout(() => setSaveStatus((s) => (s?.kind === 'ok' ? null : s)), 2500);
     } catch (e) {
       const message = (e as Error).message ?? String(e);
@@ -358,7 +363,7 @@ export default function MobileFormPanel({ workspaceId, editingProject, onSaved, 
       <div className="wm-pe-actions">
         <button type="button" className="btn ghost" onClick={onCancel} disabled={saving}>Close</button>
         <button type="button" className="btn primary" onClick={save} disabled={saving}>
-          {saving ? 'Saving…' : isEdit ? 'Save' : 'Add Project'}
+          {saving ? 'Saving…' : existingId ? 'Save' : 'Add Project'}
         </button>
       </div>
 

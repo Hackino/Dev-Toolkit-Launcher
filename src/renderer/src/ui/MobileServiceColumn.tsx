@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { ReactNode } from 'react';
 import type {
   ProjectConfig,
   MobileConfig,
@@ -8,6 +9,7 @@ import type {
   MobileBuildRecord,
   FirebaseConfig,
   LogStream,
+  MobileScriptAction,
 } from '../../../shared/types';
 import { MOBILE_PLATFORM_LABELS } from '../../../shared/types';
 import { PlatformLogo, FirebaseLogo } from '../capabilities/logos/mobileLogos';
@@ -69,6 +71,15 @@ function ActionButton({
   );
 }
 
+function AdvGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="mobile-adv-group">
+      <div className="mobile-adv-group-title">{title}</div>
+      <div className="mobile-adv-buttons">{children}</div>
+    </div>
+  );
+}
+
 export default function MobileServiceColumn({
   index,
   project,
@@ -95,6 +106,7 @@ export default function MobileServiceColumn({
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [taskBusy, setTaskBusy] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   // Set defaults from config
   useEffect(() => {
@@ -157,6 +169,16 @@ export default function MobileServiceColumn({
   const doClean = () => run(() => window.launcher.mobileClean({ projectPath: project.path, runKey }));
   const primaryRun = kind === 'android' ? doRunDevice : doRunEmu;
 
+  // Predefined tooling scripts (codegen, pods, gradle, …) stream to this terminal.
+  const script = (action: MobileScriptAction) =>
+    run(() => window.launcher.mobileRunScript({ projectPath: project.path, runKey, action }));
+
+  // Hot reload / restart write a key to the running `flutter run` process's stdin.
+  const sendKey = (input: string) => {
+    onOpenTerminal(runKey, terminalLabel);
+    void window.launcher.mobileSendInput({ projectPath: project.path, runKey, input });
+  };
+
   // Install: pick an .apk/.aab from disk, then install onto the selected device.
   // .aab is converted + installed via bundletool (downloaded on first use).
   const doInstall = async () => {
@@ -176,7 +198,7 @@ export default function MobileServiceColumn({
   };
 
   return (
-    <section className="column mobile-column" data-platform={platform} data-kind={kind}>
+    <section className={`column mobile-column ${expanded ? 'mobile-column--expanded' : ''}`} data-platform={platform} data-kind={kind}>
       {/* Header */}
       <div className="column-top">
         <div className="column-logo-group">
@@ -192,7 +214,18 @@ export default function MobileServiceColumn({
             )}
           </div>
         </div>
-        <div className="column-index" data-n={index} />
+        <div className="mobile-header-right">
+          <button
+            type="button"
+            className="mobile-expand-btn"
+            onClick={() => setExpanded((v) => !v)}
+            title={expanded ? 'Collapse tools' : 'Expand to show more tools'}
+            aria-label={expanded ? 'Collapse tools' : 'Expand tools'}
+          >
+            {expanded ? '⤡' : '⤢'}
+          </button>
+          <div className="column-index" data-n={index} />
+        </div>
       </div>
 
       {/* iOS macOS warning */}
@@ -321,7 +354,13 @@ export default function MobileServiceColumn({
         {platform === 'flutter' && (
           <>
             <ActionButton label="📦 pub get" disabled={taskBusy} onClick={() => run(() => window.launcher.mobilePubGet({ projectPath: project.path, runKey }))} />
-            <ActionButton label="🩺 Doctor" disabled={taskBusy} onClick={() => run(() => window.launcher.mobileFlutterDoctor({ projectPath: project.path, runKey }))} />
+            <ActionButton label="♻ Gen" title="Clean + regenerate code (l10n, freezed, json_serializable)" disabled={taskBusy} onClick={() => script('gen-rebuild')} />
+            {isRunning && (
+              <>
+                <ActionButton label="🔥 Reload" title="Hot reload (r)" onClick={() => sendKey('r\n')} />
+                <ActionButton label="🔁 Restart" title="Hot restart (R)" onClick={() => sendKey('R\n')} />
+              </>
+            )}
           </>
         )}
 
@@ -383,6 +422,53 @@ export default function MobileServiceColumn({
       {activeDevice && (
         <div className="mobile-device-badge">
           {activeDevice.kind === 'emulator' ? '🖥' : '📱'} {activeDevice.name}
+        </div>
+      )}
+
+      {/* Advanced tools (revealed when the column is expanded) */}
+      {expanded && (
+        <div className="mobile-advanced">
+          {platform === 'flutter' && (
+            <>
+              <AdvGroup title="Code Generation">
+                <ActionButton label="♻ Rebuild Gen" title="Clean + regenerate all generated code" disabled={taskBusy} onClick={() => script('gen-rebuild')} />
+                <ActionButton label="Build Runner" disabled={taskBusy} onClick={() => script('gen-build')} />
+                <ActionButton label="Watch" disabled={taskBusy} onClick={() => script('gen-watch')} />
+                <ActionButton label="Clean Gen" disabled={taskBusy} onClick={() => script('gen-clean')} />
+                <ActionButton label="Gen L10n" disabled={taskBusy} onClick={() => script('gen-l10n')} />
+              </AdvGroup>
+              <AdvGroup title="Assets">
+                <ActionButton label="Icons" title="flutter_launcher_icons" disabled={taskBusy} onClick={() => script('icons')} />
+                <ActionButton label="Splash" title="flutter_native_splash" disabled={taskBusy} onClick={() => script('splash')} />
+              </AdvGroup>
+              <AdvGroup title="Tooling">
+                <ActionButton label="Format" disabled={taskBusy} onClick={() => script('format')} />
+                <ActionButton label="Analyze" disabled={taskBusy} onClick={() => script('analyze')} />
+                <ActionButton label="Test" disabled={taskBusy} onClick={() => script('test')} />
+                <ActionButton label="Upgrade" disabled={taskBusy} onClick={() => script('pub-upgrade')} />
+                <ActionButton label="Outdated" disabled={taskBusy} onClick={() => script('pub-outdated')} />
+                <ActionButton label="🩺 Doctor" disabled={taskBusy} onClick={() => script('doctor')} />
+              </AdvGroup>
+            </>
+          )}
+
+          {kind === 'ios' && (
+            <AdvGroup title="iOS / CocoaPods">
+              <ActionButton label="Pod Install" disabled={taskBusy || iosBlocked} onClick={() => script('pod-install')} />
+              <ActionButton label="Pod Update" disabled={taskBusy || iosBlocked} onClick={() => script('pod-update')} />
+              <ActionButton label="Repo Update" disabled={taskBusy || iosBlocked} onClick={() => script('pod-repo-update')} />
+              <ActionButton label="Open Xcode" disabled={taskBusy || iosBlocked} onClick={() => script('open-xcode')} />
+              <ActionButton label="Clean Derived" disabled={taskBusy || iosBlocked} onClick={() => script('clean-derived')} />
+            </AdvGroup>
+          )}
+
+          {kind === 'android' && (
+            <AdvGroup title="Android / Gradle">
+              <ActionButton label="Gradle Clean" disabled={taskBusy} onClick={() => script('gradle-clean')} />
+              <ActionButton label="Dependencies" disabled={taskBusy} onClick={() => script('gradle-deps')} />
+              <ActionButton label="Stop Daemon" disabled={taskBusy} onClick={() => script('gradle-stop')} />
+            </AdvGroup>
+          )}
         </div>
       )}
       </div>

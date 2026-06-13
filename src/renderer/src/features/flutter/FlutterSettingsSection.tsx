@@ -29,13 +29,9 @@ interface Props {
 function EntryPointItem({
   entry,
   onUpdate,
-  onRemove,
-  canRemove,
 }: {
   entry: FlutterEntryPoint;
   onUpdate: (e: FlutterEntryPoint) => void;
-  onRemove: () => void;
-  canRemove: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
   const set = <K extends keyof FlutterEntryPoint>(k: K, v: FlutterEntryPoint[K]) =>
@@ -53,46 +49,20 @@ function EntryPointItem({
           onClick={(e) => e.stopPropagation()}
           onChange={(e) => set('name', e.target.value)}
         />
-        <label className="mobile-default-check" onClick={(e) => e.stopPropagation()}>
-          <input
-            type="checkbox"
-            checked={entry.isDefault}
-            onChange={(e) => set('isDefault', e.target.checked)}
-          />
-          Default
-        </label>
-        {canRemove && (
-          <button
-            type="button"
-            className="btn ghost pf-env-remove"
-            onClick={(e) => { e.stopPropagation(); onRemove(); }}
-          >✕</button>
-        )}
       </div>
 
       {expanded && (
         <div className="mobile-card-body">
-          <div className="pf-field pf-field--row">
-            <label className="pf-field pf-field--inline">
-              <span>Target file</span>
-              <input
-                type="text"
-                className="pf-mono"
-                placeholder="lib/main.dart"
-                value={entry.target}
-                onChange={(e) => set('target', e.target.value)}
-              />
-            </label>
-            <label className="pf-field pf-field--inline">
-              <span>Flavor <small>(optional)</small></span>
-              <input
-                type="text"
-                placeholder="production"
-                value={entry.flavor ?? ''}
-                onChange={(e) => set('flavor', e.target.value || null)}
-              />
-            </label>
-          </div>
+          <label className="pf-field">
+            <span>Target file <small>(detected)</small></span>
+            <input
+              type="text"
+              className="pf-mono"
+              value={entry.target}
+              readOnly
+              disabled
+            />
+          </label>
 
           <BuildConfigEditor
             entries={entry.dartDefines}
@@ -116,14 +86,8 @@ function EntryPointItem({
 }
 
 export function FlutterSettingsSection({ entries, projectPath, onChange }: Props) {
-  const addEntry = () =>
-    onChange([...entries, newEntryPoint(`Entry ${entries.length + 1}`, 'lib/main.dart')]);
-
   const updateEntry = (id: string, e: FlutterEntryPoint) =>
     onChange(entries.map((x) => (x.id === id ? e : x)));
-
-  const removeEntry = (id: string) =>
-    onChange(entries.filter((x) => x.id !== id));
 
   return (
     <div className="mobile-section">
@@ -138,10 +102,9 @@ export function FlutterSettingsSection({ entries, projectPath, onChange }: Props
 
       <div className="mobile-subsection-header">
         <span>Entry Points</span>
-        <button type="button" className="btn ghost pf-env-add" onClick={addEntry}>+ Add</button>
       </div>
       <div className="mobile-section-hint">
-        Add multiple entry points to run different configurations (dev, staging, prod) without code changes.
+        Entry points are detected from your project's <code>lib/main*.dart</code> files.
       </div>
 
       {entries.map((e) => (
@@ -149,8 +112,6 @@ export function FlutterSettingsSection({ entries, projectPath, onChange }: Props
           key={e.id}
           entry={e}
           onUpdate={(updated) => updateEntry(e.id, updated)}
-          onRemove={() => removeEntry(e.id)}
-          canRemove={entries.length > 1}
         />
       ))}
     </div>

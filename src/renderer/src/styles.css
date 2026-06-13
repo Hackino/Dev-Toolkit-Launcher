@@ -1748,6 +1748,49 @@ html, body, #root { background: var(--backdrop); background-attachment: fixed; }
   pointer-events: none;
   opacity: 0.7;
 }
+/* Expanded column doubles its width by spanning two auto-flow tracks. The board
+   is a single-row column-flow grid, so this widens the row (horizontal scroll)
+   and never pushes a sibling onto a new row. */
+.column.mobile-column--expanded { grid-column: span 2; }
+
+/* Header right cluster (expand toggle on top, index under it) */
+.mobile-header-right { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.mobile-expand-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px;
+  border-radius: 7px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255,255,255,0.04);
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: 14px; line-height: 1;
+  transition: background 140ms, color 140ms, border-color 140ms;
+}
+.mobile-expand-btn:hover { background: rgba(255,255,255,0.09); color: var(--fg); border-color: var(--accent-hover); }
+
+/* Advanced tools panel */
+.mobile-advanced {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mobile-adv-group-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+  margin-bottom: 6px;
+}
+.mobile-adv-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 6px;
+}
+
 .column.mobile-column[data-platform="android"] { --col-tint: var(--plat-android); }
 .column.mobile-column[data-platform="ios"] { --col-tint: var(--plat-ios); }
 .column.mobile-column[data-platform="flutter"] { --col-tint: var(--plat-flutter); }

@@ -1,5 +1,5 @@
 import { ipcMain, dialog, shell, app } from 'electron';
-import { statSync } from 'node:fs';
+import { statSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import type {
   MobileBuildArgs,
@@ -11,6 +11,7 @@ import type {
   MobilePlatform,
   VariantDetectArgs,
   IntrospectArgs,
+  MobileScriptAction,
 } from '../../../shared/types';
 import { detectVariants } from '../../capabilities/detection/variantDetection';
 import { introspectProject } from '../../capabilities/detection/projectIntrospection';
@@ -24,14 +25,15 @@ import { isMobileType } from '../../../shared/category';
 import {
   runMobileTask,
   stopMobileTask,
+  sendMobileTaskInput,
 } from '../../capabilities/process/mobileProcess';
+import { MOBILE_SCRIPTS } from '../../capabilities/process/mobileScripts';
 import { resolveEnvFlags } from '../../capabilities/buildflags/buildFlagResolver';
 import {
   listAndroidDevices,
   listAndroidEmulators,
   listIosDevices,
   listIosSimulators,
-  listFlutterDevices,
 } from '../../capabilities/devices/deviceService';
 import { readGradleVersion, writeGradleVersion } from '../../capabilities/versioning/gradleVersion';
 import { readPlistVersion, writePlistVersion } from '../../capabilities/versioning/plistVersion';
@@ -337,6 +339,26 @@ export function registerMobileIpc(): void {
     }
   });
 
+  // ─── Predefined tooling scripts (codegen, pods, gradle, …) ──────────────────
+
+  ipcMain.handle('mobile:runScript', (_e, args: MobileTaskRef & { action: MobileScriptAction }) => {
+    try {
+      const def = MOBILE_SCRIPTS[args.action];
+      if (!def) return { ok: false, error: `Unknown action: ${args.action}` };
+      const cwd =
+        def.dir && existsSync(join(args.projectPath, def.dir))
+          ? join(args.projectPath, def.dir)
+          : args.projectPath;
+      return runMobileTask({ taskKey: args.runKey ?? args.projectPath, command: def.command, displayCommand: def.command, cwd });
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle('mobile:sendInput', (_e, args: MobileTaskRef & { input: string }) => {
+    return sendMobileTaskInput(args.runKey ?? args.projectPath, args.input);
+  });
+
   // ─── View logs ────────────────────────────────────────────────────────────
 
   ipcMain.handle('mobile:viewLogs', (_e, args: MobileTaskRef & { deviceId?: string | null }) => {
@@ -362,7 +384,8 @@ export function registerMobileIpc(): void {
       const project = getProject(args.projectPath);
       const type = project.type as MobilePlatform;
       if (type === 'ios') return requireMacos() ? listIosDevices() : [];
-      if (type === 'flutter') return listFlutterDevices();
+      // Flutter / React Native / KMP all use the native toolchains (adb + xcrun)
+      // so devices are tagged with their real platform and match per-column filters.
       const [android, ios] = await Promise.all([
         listAndroidDevices(),
         requireMacos() ? listIosDevices() : Promise.resolve([]),
@@ -378,7 +401,6 @@ export function registerMobileIpc(): void {
       const project = getProject(args.projectPath);
       const type = project.type as MobilePlatform;
       if (type === 'ios') return requireMacos() ? listIosSimulators() : [];
-      if (type === 'flutter') return listFlutterDevices();
       const [avds, sims] = await Promise.all([
         listAndroidEmulators(),
         requireMacos() ? listIosSimulators() : Promise.resolve([]),

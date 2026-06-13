@@ -64,14 +64,6 @@ function BuildConfigItem({
           onClick={(e) => e.stopPropagation()}
           onChange={(e) => set('name', e.target.value)}
         />
-        <label className="mobile-default-check" onClick={(e) => e.stopPropagation()}>
-          <input
-            type="checkbox"
-            checked={config.isDefault}
-            onChange={(e) => set('isDefault', e.target.checked)}
-          />
-          Default
-        </label>
       </div>
 
       {expanded && (
@@ -150,10 +142,15 @@ export function AndroidSettingsSection({
     (introspect?.buildTypeConfigs ?? []).map((b) => [b.name.toLowerCase(), b]),
   );
 
-  // Auto-apply detected per-buildType settings onto each config (read-only in the UI).
+  // Auto-apply detected per-buildType settings onto each config, and auto-create
+  // a card for every detected build type (e.g. release) so its proguard / minify /
+  // signing show up without manual variant detection. All read-only in the UI.
   useEffect(() => {
     if (!introspect) return;
+    const detected = introspect.buildTypeConfigs;
+    if (detected.length === 0) return;
     let changed = false;
+
     const next = configs.map((c) => {
       const info = byType.get(c.buildType.toLowerCase());
       if (!info) return c;
@@ -173,6 +170,25 @@ export function AndroidSettingsSection({
         minify: { enabled: info.minifyEnabled, proguardFiles: info.proguardFiles },
       };
     });
+
+    // Add a card for any detected build type that has no card yet.
+    const have = new Set(next.map((c) => c.buildType.toLowerCase()));
+    for (const info of detected) {
+      if (have.has(info.name.toLowerCase())) continue;
+      changed = true;
+      next.push({
+        id: crypto.randomUUID(),
+        name: info.name.charAt(0).toUpperCase() + info.name.slice(1),
+        buildType: info.name,
+        flavor: null,
+        isDefault: false,
+        debuggable: info.debuggable,
+        signingConfig: info.signingConfig,
+        minify: { enabled: info.minifyEnabled, proguardFiles: info.proguardFiles },
+        customFlags: [],
+      });
+    }
+
     if (changed) onConfigsChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [introspect]);

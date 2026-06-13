@@ -112,6 +112,20 @@ export function runMobileTask(opts: RunMobileTaskOptions): { ok: true; taskId: s
   return { ok: true, taskId: opts.taskKey };
 }
 
+/** Write to the stdin of a running task (e.g. Flutter hot reload 'r' / restart 'R'). */
+export function sendMobileTaskInput(taskKey: string, input: string): { ok: boolean; error?: string } {
+  const record = tasks.get(taskKey);
+  if (!record?.child || record.status !== 'running') {
+    return { ok: false, error: 'No running task to send input to.' };
+  }
+  try {
+    record.child.stdin?.write(input);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
 export function stopMobileTask(taskKey: string): StopResult {
   const record = tasks.get(taskKey);
   if (!record?.child) return { ok: false, error: 'No active mobile task' };

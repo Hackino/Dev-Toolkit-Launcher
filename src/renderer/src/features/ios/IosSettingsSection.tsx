@@ -61,14 +61,6 @@ function IosConfigItem({
           onClick={(e) => e.stopPropagation()}
           onChange={(e) => set('name', e.target.value)}
         />
-        <label className="mobile-default-check" onClick={(e) => e.stopPropagation()}>
-          <input
-            type="checkbox"
-            checked={config.isDefault}
-            onChange={(e) => set('isDefault', e.target.checked)}
-          />
-          Default
-        </label>
         {canRemove && (
           <button
             type="button"
