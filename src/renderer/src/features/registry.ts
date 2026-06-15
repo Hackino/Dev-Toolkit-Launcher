@@ -40,6 +40,12 @@ export function mobileTabsFor(platform: MobilePlatform, _isEdit: boolean): Mobil
   return MOBILE_TABS[platform];
 }
 
+/** Whether a platform shows the Android Firebase row (any Android-capable platform). */
+export function showsAndroidFirebase(platform: MobilePlatform): boolean {
+  // An iOS-native project has no Android target, so Android Firebase is meaningless.
+  return platform !== 'ios';
+}
+
 /** Whether a platform shows the iOS Firebase row (iOS-capable platforms only). */
 export function showsIosFirebase(platform: MobilePlatform): boolean {
   return platform === 'ios' || platform === 'flutter' || platform === 'react-native' || platform === 'compose-multiplatform';

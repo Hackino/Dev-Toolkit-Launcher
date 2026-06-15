@@ -1,5 +1,5 @@
 import { ipcMain, dialog, shell, app } from 'electron';
-import { statSync, existsSync } from 'node:fs';
+import { statSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import type {
   MobileBuildArgs,
@@ -108,11 +108,16 @@ function harvestArtifacts(
   ctx: ReturnType<typeof buildContext>,
   args: MobileBuildArgs,
   startedAt: number,
+  action: 'build' | 'release',
 ): void {
   if (code !== 0) return;
   const platform: ArtifactPlatform =
     project.type === 'ios' || args.kmpTarget === 'ios' ? 'ios' : 'android';
-  const copied = harvestToOutput(args.projectPath, platform, startedAt);
+  // A Build produces an APK; a Bundle/release produces an AAB. Restricting the
+  // harvest to the right extension stops a Build from picking up a stray .aab
+  // (and vice-versa), which is what made Windows Builds look like Bundles.
+  const exts = platform === 'ios' ? ['ipa'] : action === 'release' ? ['aab'] : ['apk'];
+  const copied = harvestToOutput(args.projectPath, platform, startedAt, exts);
   const main = copied[0] ?? null;
   if (!main) return;
   try {
@@ -176,7 +181,7 @@ export function registerMobileIpc(): void {
         displayCommand: command,
         cwd: args.projectPath,
         env: extraEnv,
-        onComplete: (code) => harvestArtifacts(code, project, ctx, args, startedAt),
+        onComplete: (code) => harvestArtifacts(code, project, ctx, args, startedAt, 'build'),
       });
     } catch (err) {
       return { ok: false, error: String(err) };
@@ -271,7 +276,7 @@ export function registerMobileIpc(): void {
         cwd: args.projectPath,
         env: resolvedEnv,
         // After the bundle/archive finishes, copy the artifact into <root>/output and record it.
-        onComplete: (code) => harvestArtifacts(code, project, ctx, args, startedAt),
+        onComplete: (code) => harvestArtifacts(code, project, ctx, args, startedAt, 'release'),
       });
       return result;
     } catch (err) {
@@ -316,7 +321,10 @@ export function registerMobileIpc(): void {
       if (lower.endsWith('.aab')) {
         const jar = bundletoolJarPath();
         const toolsDir = dirname(jar);
-        const apks = join(toolsDir, 'install-tmp.apks');
+        // Extract APKs into a plain directory (not the .apks zip), so the produced
+        // universal.apk is a real file we can hand straight to adb.
+        const apksDir = join(toolsDir, 'install-apks-dir');
+        const universalApk = join(apksDir, 'universal.apk');
 
         // Optional release signing (mirrors mobile:generateRelease). Without a
         // keystore, bundletool signs the universal APK with its debug key, which
@@ -337,12 +345,27 @@ export function registerMobileIpc(): void {
           }
         } catch { /* config optional — fall back to debug signing */ }
 
-        const ensure = `mkdir -p "${toolsDir}" && { [ -f "${jar}" ] || curl -L --fail -o "${jar}" "${BUNDLETOOL_URL}"; }`;
+        // Clear + recreate the output dir in Node, then decide whether to download
+        // bundletool — keeps the shell command cross-platform. The previous
+        // `mkdir -p` / `{ [ -f ] || curl }` is bash-only and failed on Windows
+        // (cmd.exe). DIRECTORY output format rejects --overwrite, so we must clear
+        // any prior extraction ourselves before each run.
+        try { rmSync(apksDir, { recursive: true, force: true }); } catch { /* first run */ }
+        mkdirSync(apksDir, { recursive: true });
+
+        // bundletool only converts the .aab → a universal .apk (written into a
+        // directory via --output-format=DIRECTORY); the actual install is done by
+        // adb. bundletool's own `install-apks` was unreliable — it extracted the
+        // splits to a temp dir, printed success, and exited 0 without pushing
+        // anything to the device. adb install is the path the rest of the app uses.
         const buildApks = (signing: string) =>
-          `java -jar "${jar}" build-apks --bundle="${file}" --output="${apks}" --overwrite --mode=universal${signing}`;
-        const installApks = `java -jar "${jar}" install-apks --apks="${apks}" --device-id=${args.deviceId}`;
-        const command = `${ensure} && ${buildApks(ksFlags)} && ${installApks}`;
-        const displayCommand = `${ensure} && ${buildApks(displayKsFlags)} && ${installApks}`;
+          `java -jar "${jar}" build-apks --bundle="${file}" --output="${apksDir}" --output-format=DIRECTORY --mode=universal${signing}`;
+        const install = `adb -s ${args.deviceId} install -r "${universalApk}"`;
+        // curl.exe ships with Windows 10+ and macOS, so a plain curl (only when the
+        // jar is missing) works on both. `&&` is honoured by cmd.exe and /bin/sh.
+        const download = existsSync(jar) ? null : `curl -L --fail -o "${jar}" "${BUNDLETOOL_URL}"`;
+        const command = [download, buildApks(ksFlags), install].filter(Boolean).join(' && ');
+        const displayCommand = [download, buildApks(displayKsFlags), install].filter(Boolean).join(' && ');
         return runMobileTask({ taskKey, command, displayCommand, cwd: args.projectPath });
       }
 

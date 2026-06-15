@@ -253,7 +253,9 @@ export default function MobileServiceColumn({
       <header className="column-header">
         <h2 className="column-name" title={project.path}>{project.name}</h2>
         <div className="column-subtitle">
-          {mobileConfig?.applicationId ?? 'No application ID'}
+          {isIos
+            ? (mobileConfig?.iosSigning?.bundleId ?? 'No bundle ID')
+            : (mobileConfig?.applicationId ?? 'No application ID')}
         </div>
       </header>
 
@@ -346,7 +348,12 @@ export default function MobileServiceColumn({
       <div className="mobile-actions mobile-actions--row1">
         {isIos ? (
           <>
-            <ActionButton label="▶ Simulator" disabled={taskBusy || iosBlocked} onClick={doRunEmu} />
+            <ActionButton
+              label="▶ Simulator"
+              disabled={taskBusy || iosBlocked || !selectedDeviceId}
+              title={!selectedDeviceId ? 'Select a simulator first' : 'Build & launch on the selected simulator'}
+              onClick={doRunEmu}
+            />
             <ActionButton label="📱 Device" disabled={taskBusy || iosBlocked || !selectedDeviceId} onClick={doRunDevice} />
             <ActionButton label="📦 Archive" disabled={taskBusy || iosBlocked} onClick={doRelease} variant="primary" />
             <ActionButton label="🧹 Clean" disabled={taskBusy || iosBlocked} onClick={doClean} />

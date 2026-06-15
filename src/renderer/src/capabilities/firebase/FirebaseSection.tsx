@@ -24,6 +24,7 @@ interface Props {
   projectPath: string;
   platform: MobilePlatform;
   onChange: (v: FirebaseFormState) => void;
+  showAndroid?: boolean;
   showIos?: boolean;
   showDesktop?: boolean;
 }
@@ -86,7 +87,7 @@ function PlatformRow({
   );
 }
 
-export function FirebaseSection({ value, projectPath, platform, onChange, showIos = true, showDesktop = false }: Props) {
+export function FirebaseSection({ value, projectPath, platform, onChange, showAndroid = true, showIos = true, showDesktop = false }: Props) {
   const patch = (key: keyof FirebaseFormState, p: Partial<FirebaseEntry>) =>
     onChange({ ...value, [key]: { ...value[key], ...p } });
 
@@ -98,16 +99,18 @@ export function FirebaseSection({ value, projectPath, platform, onChange, showIo
       </div>
 
       <div className="firebase-platform-row">
-        <PlatformRow
-          title="Android Firebase"
-          entry={value.android}
-          dropLabel="google-services.json"
-          dropKind="firebase-android"
-          filters={JSON_FILTER}
-          projectPath={projectPath}
-          platform={platform}
-          onChange={(p) => patch('android', p)}
-        />
+        {showAndroid && (
+          <PlatformRow
+            title="Android Firebase"
+            entry={value.android}
+            dropLabel="google-services.json"
+            dropKind="firebase-android"
+            filters={JSON_FILTER}
+            projectPath={projectPath}
+            platform={platform}
+            onChange={(p) => patch('android', p)}
+          />
+        )}
 
         {showIos && (
           <PlatformRow

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { IosBuildConfig, IosSigningConfig, IosSigningStyle, MobilePlatform } from '../../../../shared/types';
 import { BuildConfigEditor } from '../../capabilities/buildConfig/BuildConfigEditor';
 import { VariantDetector } from '../../capabilities/variants/VariantDetector';
@@ -120,6 +120,33 @@ export function IosSettingsSection({
 
   const { data: introspect, loading: introspecting, detect } = useIntrospection(projectPath, platform);
 
+  // Auto-fill the workspace/project field from detection when it's still empty.
+  // A native app exposes only an .xcodeproj (no .xcworkspace); detection already
+  // prefers .xcworkspace when both exist, so [0] is the right default either way.
+  useEffect(() => {
+    if (!workspace && introspect?.iosWorkspaces?.length) {
+      onWorkspaceChange(introspect.iosWorkspaces[0]);
+    }
+  }, [introspect, workspace, onWorkspaceChange]);
+
+  // Auto-detect the real scheme(s) on load and replace the placeholder seed config
+  // (scheme "MyApp") so Run/Build/Archive use the project's actual scheme without a
+  // manual Detect click. Only fires while the configs are still the untouched seed.
+  useEffect(() => {
+    if (!projectPath.trim()) return;
+    const allPlaceholder = configs.every((c) => !c.scheme || c.scheme === 'MyApp');
+    if (!allPlaceholder) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const detected = await window.launcher.mobileDetectVariants({ projectPath, platform, deep: false });
+        if (cancelled || !detected?.iosSchemes?.length) return;
+        onConfigsChange(applyIosDetection([], detected));
+      } catch { /* detection optional */ }
+    })();
+    return () => { cancelled = true; };
+  }, [projectPath]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="mobile-section">
       <div className="mobile-section-title">iOS Settings</div>
@@ -147,7 +174,7 @@ export function IosSettingsSection({
         <span>Workspace / Project path <small>(detected — relative to project root)</small></span>
         <SelectInput
           className="pf-mono"
-          placeholder="MyApp.xcworkspace"
+          placeholder="MyApp.xcworkspace or MyApp.xcodeproj"
           value={workspace}
           options={introspect?.iosWorkspaces ?? []}
           onChange={onWorkspaceChange}

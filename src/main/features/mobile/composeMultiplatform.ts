@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import type { LanguageFeature, MobileCommands, MobileCommandContext } from '../../core/ports';
 import type { KmpTarget, MobileConfig } from '../../../shared/types';
-import { gradlewBin } from '../../capabilities/gradle/gradle';
+import { gradlewBin, capitalize } from '../../capabilities/gradle/gradle';
 import { androidSigningFlags } from '../../capabilities/signing/androidSigning';
 import { resolveFlags } from '../../capabilities/buildflags/buildFlagResolver';
 
@@ -15,10 +15,18 @@ function modulePrefix(ctx: MobileCommandContext): string {
   return `:${ctx.config.kmpModule || 'composeApp'}:`;
 }
 
+/** Android variant (flavor + build type) for the selected build config; defaults to Debug. */
+function variantSuffix(ctx: MobileCommandContext): string {
+  const cfg = ctx.androidBuildConfig;
+  if (!cfg) return 'Debug';
+  const flavor = cfg.flavor ? capitalize(cfg.flavor) : '';
+  return `${flavor}${capitalize(cfg.buildType || 'debug')}`;
+}
+
 function targetTask(ctx: MobileCommandContext, target: KmpTarget): string {
   const prefix = modulePrefix(ctx);
   switch (target) {
-    case 'android': return `${prefix}assembleDebug`;
+    case 'android': return `${prefix}assemble${variantSuffix(ctx)}`;
     case 'ios':
       if (process.platform !== 'darwin') throw new Error(IOS_NOT_MACOS);
       return `${prefix}iosSimulatorArm64Binaries`;
@@ -59,7 +67,7 @@ const commands: MobileCommands = {
     }
     if (target === 'android') {
       const mod = ctx.config.androidModule || ctx.config.kmpModule || 'composeApp';
-      const installCmd = [gradlewBin(ctx.projectPath), `:${mod}:installDebug`, ...gradleFlags(ctx)].join(' ');
+      const installCmd = [gradlewBin(ctx.projectPath), `:${mod}:install${variantSuffix(ctx)}`, ...gradleFlags(ctx)].join(' ');
       const appId = ctx.config.applicationId ?? '';
       if (!appId) return installCmd;
       const launch = `adb -s ${deviceId} shell monkey -p ${appId} -c android.intent.category.LAUNCHER 1`;
@@ -78,7 +86,8 @@ const commands: MobileCommands = {
     if (target === 'android') {
       const mod = ctx.config.kmpModule || 'composeApp';
       const signingFlags = androidSigningFlags(ctx.config.androidSigning, ctx.resolvedEnv);
-      return [gradlewBin(ctx.projectPath), `:${mod}:bundleRelease`, ...signingFlags, ...gradleFlags(ctx)].join(' ');
+      // Bundle the selected variant (e.g. bundleDebug / bundleRelease), not a hardcoded Release.
+      return [gradlewBin(ctx.projectPath), `:${mod}:bundle${variantSuffix(ctx)}`, ...signingFlags, ...gradleFlags(ctx)].join(' ');
     }
     return commands.buildCommand(ctx);
   },
@@ -106,7 +115,8 @@ const commands: MobileCommands = {
     const target = ctx.kmpTarget ?? 'desktop';
     const mod = ctx.config.kmpModule || 'composeApp';
     if (target === 'android') {
-      return join(ctx.projectPath, mod, 'build', 'outputs', 'apk', 'debug', `${mod}-debug.apk`);
+      const variant = variantSuffix(ctx).toLowerCase();
+      return join(ctx.projectPath, mod, 'build', 'outputs', 'apk', variant, `${mod}-${variant}.apk`);
     }
     return null;
   },

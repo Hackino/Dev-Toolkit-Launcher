@@ -19,7 +19,7 @@ import { FlutterSettingsSection, DEFAULT_FLUTTER_ENTRIES } from '../features/flu
 import { ComposeMultiplatformSection } from '../features/compose-multiplatform/ComposeMultiplatformSection';
 import { FirebaseSection, DEFAULT_FIREBASE_STATE, type FirebaseFormState } from '../capabilities/firebase/FirebaseSection';
 import { DEFAULT_NATIVE_CONFIG } from '../capabilities/native/NativeBuildSection';
-import { mobileTabsFor, MOBILE_TAB_LABELS, showsIosFirebase, showsDesktopFirebase, type MobileTabKey } from '../features/registry';
+import { mobileTabsFor, MOBILE_TAB_LABELS, showsAndroidFirebase, showsIosFirebase, showsDesktopFirebase, type MobileTabKey } from '../features/registry';
 
 const PLATFORMS: MobilePlatform[] = ['android', 'ios', 'flutter', 'react-native', 'compose-multiplatform'];
 
@@ -352,6 +352,7 @@ export default function MobileFormPanel({ workspaceId, editingProject, onSaved, 
             projectPath={state.path}
             platform={state.platform}
             onChange={(v) => set('firebase', v)}
+            showAndroid={showsAndroidFirebase(state.platform)}
             showIos={showsIosFirebase(state.platform)}
             showDesktop={showsDesktopFirebase(state.platform)}
           />

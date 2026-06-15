@@ -3,8 +3,9 @@
  * the settings UI can offer them as dropdowns instead of free text: Gradle
  * modules, application IDs, iOS bundle IDs, and Android signing configs.
  */
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { homedir } from 'node:os';
 import type {
   MobilePlatform,
   MobileIntrospection,
@@ -328,6 +329,67 @@ function parseIosSigning(projectPath: string): IosSigningDetection {
   };
 }
 
+// ─── Installed provisioning profiles (~/Library/MobileDevice) ───────────────────
+
+type ProfileInfo = { name: string; appId: string | null; teams: string[] };
+
+/**
+ * Read the provisioning profiles Xcode has installed on this Mac. The pbxproj only
+ * lists a PROVISIONING_PROFILE_SPECIFIER under *manual* signing — automatic signing
+ * leaves it empty, which is why the dropdown was blank. A `.mobileprovision` is a
+ * CMS-signed blob with a plaintext XML plist embedded; we slice that out and read
+ * the Name / app-id / team without spawning `security`.
+ */
+function readInstalledProfiles(): ProfileInfo[] {
+  if (process.platform !== 'darwin') return [];
+  const dir = join(homedir(), 'Library', 'MobileDevice', 'Provisioning Profiles');
+  let entries: string[];
+  try { entries = readdirSync(dir); } catch { return []; }
+  const profiles: ProfileInfo[] = [];
+  for (const entry of entries) {
+    if (!/\.(mobileprovision|provisionprofile)$/i.test(entry)) continue;
+    try {
+      const raw = readFileSync(join(dir, entry), 'latin1');
+      const start = raw.indexOf('<?xml');
+      const end = raw.indexOf('</plist>');
+      if (start < 0 || end < 0) continue;
+      const plist = raw.slice(start, end + '</plist>'.length);
+      const name = plist.match(/<key>Name<\/key>\s*<string>([^<]*)<\/string>/)?.[1]?.trim();
+      if (!name) continue;
+      const appId = plist.match(/<key>application-identifier<\/key>\s*<string>([^<]*)<\/string>/)?.[1]?.trim() ?? null;
+      const teamBlock = plist.match(/<key>TeamIdentifier<\/key>\s*<array>([\s\S]*?)<\/array>/)?.[1] ?? '';
+      const teams = [...teamBlock.matchAll(/<string>([^<]*)<\/string>/g)].map((m) => m[1].trim());
+      profiles.push({ name, appId, teams });
+    } catch { /* skip unreadable profile */ }
+  }
+  return profiles;
+}
+
+/** True if a profile targets one of the project's bundle ids (incl. `*` wildcard) or teams. */
+function profileMatches(p: ProfileInfo, bundleIds: string[], teamIds: string[]): boolean {
+  if (bundleIds.length === 0 && teamIds.length === 0) return true;
+  if (teamIds.length && p.teams.some((t) => teamIds.includes(t))) return true;
+  if (p.appId) {
+    const dot = p.appId.indexOf('.');
+    const pattern = dot >= 0 ? p.appId.slice(dot + 1) : p.appId; // strip the TEAMID. prefix
+    for (const bid of bundleIds) {
+      if (pattern === bid) return true;
+      if (pattern.endsWith('*') && bid.startsWith(pattern.slice(0, -1))) return true;
+    }
+  }
+  return false;
+}
+
+/** Profiles from the pbxproj plus installed ones relevant to this project's ids/teams. */
+function mergeProvisioningProfiles(fromPbx: string[], bundleIds: string[], teamIds: string[]): string[] {
+  const installed = readInstalledProfiles();
+  const matched = installed.filter((p) => profileMatches(p, bundleIds, teamIds)).map((p) => p.name);
+  // If nothing matched (e.g. ids not detected yet), fall back to listing all so the
+  // dropdown is never silently empty when profiles do exist on the machine.
+  const names = matched.length ? matched : installed.map((p) => p.name);
+  return uniq([...fromPbx, ...names]);
+}
+
 // ─── KMP build targets (build.gradle.kts kotlin{} block) ────────────────────────
 
 function parseKmpTargets(projectPath: string, module: string): KmpTarget[] {
@@ -388,7 +450,11 @@ export function introspectProject(
       result.iosTeamIds = signing.teamIds;
       result.iosDeploymentTargets = signing.deploymentTargets;
       result.iosCertificates = signing.certificates;
-      result.iosProvisioningProfiles = signing.provisioningProfiles;
+      result.iosProvisioningProfiles = mergeProvisioningProfiles(
+        signing.provisioningProfiles,
+        result.bundleIds,
+        signing.teamIds,
+      );
     }
     if (platform === 'compose-multiplatform') {
       result.kmpTargets = parseKmpTargets(projectPath, module);

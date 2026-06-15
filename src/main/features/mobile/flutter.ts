@@ -49,6 +49,22 @@ function buildSubcommand(target: MobileCommandContext['kmpTarget'], release: boo
   }
 }
 
+/** Distributable `flutter build` subcommand for the Archive/Bundle action (per target). */
+function packageSubcommand(target: MobileCommandContext['kmpTarget']): string {
+  switch (target) {
+    case 'ios': return 'build ipa';
+    case 'web': return 'build web';
+    case 'desktop': return `build ${desktopFlutterTarget()}`;
+    case 'android':
+    default: return 'build appbundle';
+  }
+}
+
+/** `--debug` / `--profile` / `--release` flag for the column's selected mode. */
+function modeFlag(mode: 'debug' | 'profile' | 'release'): string {
+  return mode === 'debug' ? '--debug' : mode === 'profile' ? '--profile' : '--release';
+}
+
 const commands: MobileCommands = {
   platform: 'flutter',
 
@@ -73,12 +89,22 @@ const commands: MobileCommands = {
   },
 
   runOnEmulatorCommand(ctx, deviceId) {
-    return commands.runOnDeviceCommand(ctx, deviceId);
+    const runCmd = commands.runOnDeviceCommand(ctx, deviceId);
+    // An iOS simulator must be booted before Flutter's underlying xcodebuild can
+    // resolve its destination — otherwise it reports "only macOS" destinations and
+    // the build fails. Boot it (idempotent) and open Simulator.app first.
+    if (ctx.kmpTarget === 'ios' && process.platform === 'darwin') {
+      const boot = `{ xcrun simctl boot ${deviceId} >/dev/null 2>&1 || true; }`;
+      return `${boot} && open -a Simulator && ${runCmd}`;
+    }
+    return runCmd;
   },
 
   releaseCommand(ctx) {
     const ep = ctx.flutterEntryPoint ?? defaultEntry(ctx);
-    return [`flutter ${buildSubcommand(ctx.kmpTarget, true)}`, ...entryFlags(ep, ctx.config.globalFlags)].join(' ');
+    // Archive/Bundle honours the selected build configuration (debug/profile/release)
+    // instead of always forcing --release.
+    return [`flutter ${packageSubcommand(ctx.kmpTarget)} ${modeFlag(selectedMode(ctx))}`, ...entryFlags(ep, ctx.config.globalFlags)].join(' ');
   },
 
   logsCommand(_ctx, deviceId) {

@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import type { LanguageFeature, MobileCommands, MobileCommandContext } from '../../core/ports';
 import type { MobileConfig } from '../../../shared/types';
-import { gradlewBin } from '../../capabilities/gradle/gradle';
+import { gradlewBin, capitalize } from '../../capabilities/gradle/gradle';
 import { androidSigningFlags } from '../../capabilities/signing/androidSigning';
 import { resolveFlags } from '../../capabilities/buildflags/buildFlagResolver';
 
@@ -16,6 +16,14 @@ function gradleFlags(ctx: MobileCommandContext): string[] {
   return resolveFlags(ctx.config.globalFlags, ['gradle-prop', 'gradle-flag', 'gradle-system-prop', 'flutter-flag']);
 }
 
+/** Android variant (flavor + build type) for the selected build config; defaults to Debug. */
+function variantSuffix(ctx: MobileCommandContext): string {
+  const cfg = ctx.androidBuildConfig;
+  if (!cfg) return 'Debug';
+  const flavor = cfg.flavor ? capitalize(cfg.flavor) : '';
+  return `${flavor}${capitalize(cfg.buildType || 'debug')}`;
+}
+
 const commands: MobileCommands = {
   platform: 'react-native',
 
@@ -25,7 +33,7 @@ const commands: MobileCommands = {
       return 'npx react-native build-ios --mode Debug';
     }
     const gw = androidGradlew(ctx.projectPath);
-    return [`cd android && ${gw}`, 'assembleDebug', ...gradleFlags(ctx)].join(' ');
+    return [`cd android && ${gw}`, `assemble${variantSuffix(ctx)}`, ...gradleFlags(ctx)].join(' ');
   },
 
   cleanCommand(ctx) {
@@ -50,7 +58,8 @@ const commands: MobileCommands = {
     }
     const gw = androidGradlew(ctx.projectPath);
     const signingFlags = androidSigningFlags(ctx.config.androidSigning, ctx.resolvedEnv);
-    return [`cd android && ${gw}`, 'bundleRelease', ...signingFlags, ...gradleFlags(ctx)].join(' ');
+    // Bundle the selected variant (e.g. bundleDebug / bundleRelease), not a hardcoded Release.
+    return [`cd android && ${gw}`, `bundle${variantSuffix(ctx)}`, ...signingFlags, ...gradleFlags(ctx)].join(' ');
   },
 
   logsCommand(ctx, deviceId) {
@@ -68,7 +77,8 @@ const commands: MobileCommands = {
   },
 
   expectedArtifactPath(ctx) {
-    return join(ctx.projectPath, 'android', 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk');
+    const variant = variantSuffix(ctx).toLowerCase();
+    return join(ctx.projectPath, 'android', 'app', 'build', 'outputs', 'apk', variant, `app-${variant}.apk`);
   },
 };
 

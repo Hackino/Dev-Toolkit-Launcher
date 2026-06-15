@@ -29,7 +29,20 @@ const BUILD_DIRS = [
 const OUTPUT_DIR = 'output';
 const MAX_DEPTH = 10;
 
-function findArtifacts(dir: string, re: RegExp, since: number, depth = 0, acc: string[] = []): string[] {
+// Directories that hold non-deliverable, intermediate build products. The Android
+// Gradle Plugin drops an `intermediary-bundle.aab` under `intermediates/` during a
+// plain `assemble*` (APK) build — harvesting it made a normal Build look like it
+// produced a bundle. Final, installable artifacts always live under `outputs/`.
+const SKIP_DIRS = new Set(['intermediates', 'tmp', 'kotlin', 'generated', '.transforms']);
+
+/** Build a regex matching files with any of the given extensions (no leading dot). */
+function extsRegex(exts: string[]): RegExp {
+  return new RegExp(`\\.(${exts.map((e) => e.replace(/^\./, '')).join('|')})$`, 'i');
+}
+
+type ArtifactHit = { path: string; mtime: number };
+
+function findArtifacts(dir: string, re: RegExp, depth = 0, acc: ArtifactHit[] = []): ArtifactHit[] {
   if (depth > MAX_DEPTH) return acc;
   let entries: string[];
   try { entries = readdirSync(dir); } catch { return acc; }
@@ -38,24 +51,47 @@ function findArtifacts(dir: string, re: RegExp, since: number, depth = 0, acc: s
     let st;
     try { st = statSync(full); } catch { continue; }
     if (st.isDirectory()) {
-      findArtifacts(full, re, since, depth + 1, acc);
-    } else if (re.test(name) && st.mtimeMs >= since) {
-      acc.push(full);
+      if (SKIP_DIRS.has(name)) continue;
+      findArtifacts(full, re, depth + 1, acc);
+    } else if (re.test(name)) {
+      acc.push({ path: full, mtime: st.mtimeMs });
     }
   }
   return acc;
 }
 
-/** Artifacts of the given platform produced at/after `since` (a build start time). */
-export function collectBuiltArtifacts(projectPath: string, platform: ArtifactPlatform, since: number): string[] {
-  const re = ARTIFACT_RE[platform];
-  const found = new Set<string>();
+/**
+ * Artifacts of the given platform for the just-finished build. `exts` narrows the
+ * match to a specific deliverable kind (['apk'] for a Build, ['aab'] for a
+ * Bundle/release) so a Build never harvests a stray .aab and vice-versa.
+ *
+ * Prefers artifacts produced at/after `since` (the build start). If none are fresh —
+ * which happens when Gradle reports the task UP-TO-DATE and never rewrites the
+ * output — it falls back to the single newest match so the artifact still lands in
+ * output/ instead of silently producing nothing.
+ */
+export function collectBuiltArtifacts(
+  projectPath: string,
+  platform: ArtifactPlatform,
+  since: number,
+  exts?: string[],
+): string[] {
+  const re = exts && exts.length ? extsRegex(exts) : ARTIFACT_RE[platform];
+  const byPath = new Map<string, number>();
   for (const rel of BUILD_DIRS) {
     const base = join(projectPath, rel);
     if (base.endsWith(OUTPUT_DIR)) continue;
-    if (existsSync(base)) for (const f of findArtifacts(base, re, since)) found.add(f);
+    if (existsSync(base)) for (const hit of findArtifacts(base, re)) byPath.set(hit.path, hit.mtime);
   }
-  return [...found];
+  const hits = [...byPath.entries()].map(([path, mtime]) => ({ path, mtime }));
+  if (hits.length === 0) return [];
+
+  const fresh = hits.filter((h) => h.mtime >= since);
+  if (fresh.length) return fresh.map((h) => h.path);
+
+  // Nothing fresh — Gradle was UP-TO-DATE. Surface the newest existing artifact.
+  const newest = hits.reduce((a, b) => (b.mtime > a.mtime ? b : a));
+  return [newest.path];
 }
 
 /** Copy artifacts into `<projectRoot>/output/`; returns the destination paths. */
@@ -75,8 +111,13 @@ export function copyArtifactsToOutput(projectPath: string, artifacts: string[]):
 }
 
 /** Collect freshly-built artifacts and copy them into output/ in one step. */
-export function harvestToOutput(projectPath: string, platform: ArtifactPlatform, since: number): string[] {
-  return copyArtifactsToOutput(projectPath, collectBuiltArtifacts(projectPath, platform, since));
+export function harvestToOutput(
+  projectPath: string,
+  platform: ArtifactPlatform,
+  since: number,
+  exts?: string[],
+): string[] {
+  return copyArtifactsToOutput(projectPath, collectBuiltArtifacts(projectPath, platform, since, exts));
 }
 
 /** List artifacts already sitting in `<projectRoot>/output/`, filtered by extension. */
