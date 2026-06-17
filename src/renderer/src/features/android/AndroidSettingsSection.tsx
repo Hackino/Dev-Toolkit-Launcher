@@ -42,11 +42,13 @@ function BuildConfigItem({
   signingConfigNames,
   detected,
   onUpdate,
+  onSetDefault,
 }: {
   config: AndroidBuildConfig;
   signingConfigNames: string[];
   detected: boolean;
   onUpdate: (c: AndroidBuildConfig) => void;
+  onSetDefault: () => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const set = <K extends keyof AndroidBuildConfig>(k: K, v: AndroidBuildConfig[K]) =>
@@ -64,6 +66,18 @@ function BuildConfigItem({
           onClick={(e) => e.stopPropagation()}
           onChange={(e) => set('name', e.target.value)}
         />
+        <label
+          className="mobile-default-check"
+          onClick={(e) => e.stopPropagation()}
+          title="Use as the default configuration in the column dropdown"
+        >
+          <input
+            type="checkbox"
+            checked={config.isDefault}
+            onChange={(e) => { if (e.target.checked) onSetDefault(); }}
+          />
+          <span>Default</span>
+        </label>
       </div>
 
       {expanded && (
@@ -135,6 +149,10 @@ export function AndroidSettingsSection({
 }: Props) {
   const updateConfig = (id: string, c: AndroidBuildConfig) =>
     onConfigsChange(configs.map((x) => (x.id === id ? c : x)));
+
+  // Exactly one config is the default (drives the column's config dropdown).
+  const setDefaultConfig = (id: string) =>
+    onConfigsChange(configs.map((x) => ({ ...x, isDefault: x.id === id })));
 
   const { data: introspect, loading: introspecting, detect } = useIntrospection(projectPath, platform, module);
   const signingConfigNames = introspect?.signingConfigs.map((s) => s.name) ?? [];
@@ -259,6 +277,7 @@ export function AndroidSettingsSection({
           signingConfigNames={signingConfigNames}
           detected={byType.has(c.buildType.toLowerCase())}
           onUpdate={(updated) => updateConfig(c.id, updated)}
+          onSetDefault={() => setDefaultConfig(c.id)}
         />
       ))}
     </div>

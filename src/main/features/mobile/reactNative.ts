@@ -33,7 +33,8 @@ const commands: MobileCommands = {
       return 'npx react-native build-ios --mode Debug';
     }
     const gw = androidGradlew(ctx.projectPath);
-    return [`cd android && ${gw}`, `assemble${variantSuffix(ctx)}`, ...gradleFlags(ctx)].join(' ');
+    // `clean` first so a fresh build is produced after any gradle/config change.
+    return [`cd android && ${gw}`, 'clean', `assemble${variantSuffix(ctx)}`, ...gradleFlags(ctx)].join(' ');
   },
 
   cleanCommand(ctx) {
@@ -58,8 +59,8 @@ const commands: MobileCommands = {
     }
     const gw = androidGradlew(ctx.projectPath);
     const signingFlags = androidSigningFlags(ctx.config.androidSigning, ctx.resolvedEnv);
-    // Bundle the selected variant (e.g. bundleDebug / bundleRelease), not a hardcoded Release.
-    return [`cd android && ${gw}`, `bundle${variantSuffix(ctx)}`, ...signingFlags, ...gradleFlags(ctx)].join(' ');
+    // `clean` first for a fresh bundle. Bundle the selected variant (e.g. bundleDebug / bundleRelease).
+    return [`cd android && ${gw}`, 'clean', `bundle${variantSuffix(ctx)}`, ...signingFlags, ...gradleFlags(ctx)].join(' ');
   },
 
   logsCommand(ctx, deviceId) {

@@ -209,7 +209,6 @@ export default function App() {
                         devicesDetecting={devicesDetecting}
                         status={{ status: tab?.status ?? 'idle', lastExitCode: tab?.lastExitCode ?? null }}
                         busy={!!busy[project.path]}
-                        lastBuild={md?.lastBuild ?? null}
                         onOpenTerminal={terminals.openTerminal}
                         onLog={terminals.writeLine}
                         onEdit={() => setManagerOpen(true)}

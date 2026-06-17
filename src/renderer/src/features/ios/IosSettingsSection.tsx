@@ -37,13 +37,11 @@ interface Props {
 function IosConfigItem({
   config,
   onUpdate,
-  onRemove,
-  canRemove,
+  onSetDefault,
 }: {
   config: IosBuildConfig;
   onUpdate: (c: IosBuildConfig) => void;
-  onRemove: () => void;
-  canRemove: boolean;
+  onSetDefault: () => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const set = <K extends keyof IosBuildConfig>(k: K, v: IosBuildConfig[K]) =>
@@ -61,14 +59,18 @@ function IosConfigItem({
           onClick={(e) => e.stopPropagation()}
           onChange={(e) => set('name', e.target.value)}
         />
-        {canRemove && (
-          <button
-            type="button"
-            className="btn ghost pf-env-remove"
-            onClick={(e) => { e.stopPropagation(); onRemove(); }}
-            title="Remove"
-          >✕</button>
-        )}
+        <label
+          className="mobile-default-check"
+          onClick={(e) => e.stopPropagation()}
+          title="Use as the default configuration in the column dropdown"
+        >
+          <input
+            type="checkbox"
+            checked={config.isDefault}
+            onChange={(e) => { if (e.target.checked) onSetDefault(); }}
+          />
+          <span>Default</span>
+        </label>
       </div>
 
       {expanded && (
@@ -112,8 +114,9 @@ export function IosSettingsSection({
   const updateConfig = (id: string, c: IosBuildConfig) =>
     onConfigsChange(configs.map((x) => (x.id === id ? c : x)));
 
-  const removeConfig = (id: string) =>
-    onConfigsChange(configs.filter((x) => x.id !== id));
+  // Exactly one config is the default (drives the column's config dropdown).
+  const setDefaultConfig = (id: string) =>
+    onConfigsChange(configs.map((x) => ({ ...x, isDefault: x.id === id })));
 
   const setSigning = <K extends keyof IosSigningConfig>(k: K, v: IosSigningConfig[K]) =>
     onSigningChange({ ...signing, [k]: v });
@@ -198,8 +201,7 @@ export function IosSettingsSection({
           key={c.id}
           config={c}
           onUpdate={(updated) => updateConfig(c.id, updated)}
-          onRemove={() => removeConfig(c.id)}
-          canRemove={configs.length > 1}
+          onSetDefault={() => setDefaultConfig(c.id)}
         />
       ))}
 

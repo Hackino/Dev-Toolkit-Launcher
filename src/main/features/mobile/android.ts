@@ -29,7 +29,9 @@ const commands: MobileCommands = {
 
   buildCommand(ctx) {
     const task = `${modulePrefix(ctx)}assemble${variantSuffix(ctx)}`;
-    return [gradlewBin(ctx.projectPath), task, ...buildFlags(ctx)].join(' ');
+    // Always `clean` first so build-config / gradle changes never produce a stale,
+    // cached artifact. Gradle runs the listed tasks in order in one invocation.
+    return [gradlewBin(ctx.projectPath), 'clean', task, ...buildFlags(ctx)].join(' ');
   },
 
   cleanCommand(ctx) {
@@ -59,7 +61,8 @@ const commands: MobileCommands = {
     // Bundle (.aab) for the currently selected variant (flavor + build type).
     const task = `${modulePrefix(ctx)}bundle${variantSuffix(ctx)}`;
     const signingFlags = androidSigningFlags(ctx.config.androidSigning, ctx.resolvedEnv);
-    return [gradlewBin(ctx.projectPath), task, ...buildFlags(ctx), ...signingFlags].join(' ');
+    // `clean` first for a fresh bundle (avoids cached output after config changes).
+    return [gradlewBin(ctx.projectPath), 'clean', task, ...buildFlags(ctx), ...signingFlags].join(' ');
   },
 
   logsCommand(ctx, deviceId) {

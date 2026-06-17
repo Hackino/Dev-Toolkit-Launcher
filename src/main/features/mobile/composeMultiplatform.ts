@@ -52,7 +52,8 @@ const commands: MobileCommands = {
 
   buildCommand(ctx) {
     const target = ctx.kmpTarget ?? 'desktop';
-    return [gradlewBin(ctx.projectPath), targetTask(ctx, target), ...gradleFlags(ctx)].join(' ');
+    // `clean` first so build-config / gradle changes never yield a stale cached build.
+    return [gradlewBin(ctx.projectPath), 'clean', targetTask(ctx, target), ...gradleFlags(ctx)].join(' ');
   },
 
   cleanCommand(ctx) {
@@ -86,8 +87,8 @@ const commands: MobileCommands = {
     if (target === 'android') {
       const mod = ctx.config.kmpModule || 'composeApp';
       const signingFlags = androidSigningFlags(ctx.config.androidSigning, ctx.resolvedEnv);
-      // Bundle the selected variant (e.g. bundleDebug / bundleRelease), not a hardcoded Release.
-      return [gradlewBin(ctx.projectPath), `:${mod}:bundle${variantSuffix(ctx)}`, ...signingFlags, ...gradleFlags(ctx)].join(' ');
+      // `clean` first for a fresh bundle. Bundle the selected variant (e.g. bundleDebug / bundleRelease).
+      return [gradlewBin(ctx.projectPath), 'clean', `:${mod}:bundle${variantSuffix(ctx)}`, ...signingFlags, ...gradleFlags(ctx)].join(' ');
     }
     return commands.buildCommand(ctx);
   },

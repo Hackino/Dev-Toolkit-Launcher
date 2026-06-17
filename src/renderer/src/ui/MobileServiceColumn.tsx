@@ -6,7 +6,6 @@ import type {
   MobileDevice,
   MobilePlatform,
   ServiceStatus,
-  MobileBuildRecord,
   FirebaseConfig,
   LogStream,
   MobileScriptAction,
@@ -32,7 +31,6 @@ interface Props {
   devices: MobileDevice[];
   status: { status: ServiceStatus; lastExitCode: number | null };
   busy: boolean;
-  lastBuild: MobileBuildRecord | null;
   onDetectDevices: () => void;
   devicesDetecting: boolean;
   onOpenTerminal: (key: string, name: string) => void;
@@ -94,7 +92,6 @@ export default function MobileServiceColumn({
   devices,
   status,
   busy,
-  lastBuild,
   onDetectDevices,
   devicesDetecting,
   onOpenTerminal,
@@ -113,6 +110,7 @@ export default function MobileServiceColumn({
   const [taskBusy, setTaskBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [installModal, setInstallModal] = useState<{ artifacts: OutputArtifact[]; selected: string | null } | null>(null);
+  const [outputModal, setOutputModal] = useState<{ artifacts: OutputArtifact[] } | null>(null);
 
   // Set defaults from config
   useEffect(() => {
@@ -209,6 +207,14 @@ export default function MobileServiceColumn({
     await run(() =>
       window.launcher.mobileInstallArtifact({ projectPath: project.path, deviceId: selectedDeviceId, artifactPath, runKey }),
     );
+  };
+
+  // Output: open a dialog listing this project's builds in output/ for this platform.
+  // Each row has a folder icon that reveals the artifact in Finder / Explorer.
+  const doOpenOutput = async () => {
+    const exts = isIos ? ['ipa'] : ['apk', 'aab'];
+    const artifacts = await window.launcher.mobileListOutputArtifacts({ projectPath: project.path, exts });
+    setOutputModal({ artifacts });
   };
 
   return (
@@ -375,6 +381,12 @@ export default function MobileServiceColumn({
 
       {/* Secondary actions row */}
       <div className="mobile-actions mobile-actions--row2">
+        <ActionButton
+          label="📂 Output"
+          disabled={taskBusy}
+          title={`Browse this project's built ${isIos ? '.ipa' : '.apk / .aab'} files in output/`}
+          onClick={doOpenOutput}
+        />
         {usesDevices && (
           <ActionButton
             label="📥 Install"
@@ -419,25 +431,6 @@ export default function MobileServiceColumn({
         <StatusBadge status={status.status} lastExitCode={status.lastExitCode} />
         {taskBusy && <span className="mobile-busy-indicator">⏳</span>}
       </div>
-
-      {/* Last build info */}
-      {lastBuild?.lastArtifactPath && (
-        <div className="mobile-last-build">
-          <span className="mobile-last-build-label">Last:</span>
-          <span className="mobile-last-build-variant">{lastBuild.lastVariant ?? 'build'}</span>
-          {lastBuild.sizeBytes != null && (
-            <span className="mobile-last-build-size">{sizeDisplay(lastBuild.sizeBytes)}</span>
-          )}
-          <button
-            type="button"
-            className="mobile-last-build-open btn ghost"
-            onClick={() => window.launcher.openPath(lastBuild.lastArtifactPath!)}
-            title="Show artifact in Finder / Explorer"
-          >
-            📂
-          </button>
-        </div>
-      )}
 
       {/* Firebase status chips (only those relevant to this column's platform) */}
       {((kind === 'android' && fbAndroid?.enabled) ||
@@ -553,6 +546,43 @@ export default function MobileServiceColumn({
                   📥 Install
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Output dialog — lists this project's builds in output/ for this platform */}
+      {outputModal && (
+        <div className="install-modal-overlay" onClick={() => setOutputModal(null)}>
+          <div className="install-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="install-modal-title">
+              {isIos ? 'iOS builds' : 'Android builds'} in output/
+            </div>
+            {outputModal.artifacts.length === 0 ? (
+              <div className="install-modal-empty">
+                No artifacts found in <code>output/</code>.
+                <span>Build or Bundle first to produce {isIos ? 'an .ipa' : 'an .apk / .aab'}.</span>
+              </div>
+            ) : (
+              <div className="install-modal-list">
+                {outputModal.artifacts.map((a) => (
+                  <div key={a.path} className="install-modal-item">
+                    <span className="install-modal-name" title={a.path}>{a.name}</span>
+                    <span className="install-modal-size">{sizeDisplay(a.sizeBytes)}</span>
+                    <button
+                      type="button"
+                      className="mobile-last-build-open btn ghost"
+                      onClick={() => window.launcher.openPath(a.path)}
+                      title="Show in Finder / Explorer"
+                    >
+                      📂
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="install-modal-actions">
+              <button type="button" className="btn ghost" onClick={() => setOutputModal(null)}>Close</button>
             </div>
           </div>
         </div>

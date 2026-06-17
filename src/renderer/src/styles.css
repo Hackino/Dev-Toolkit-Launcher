@@ -729,6 +729,25 @@ html, body, #root {
 .pf-field input:focus, .pf-field select:focus {
   outline: none; border-color: var(--accent-hover);
 }
+/*
+ * Native <option> elements in an open dropdown are drawn by the OS. On Windows the
+ * popup uses a light system background while inheriting the dark-theme text color,
+ * leaving unselected options looking faded/illegible. Set both colors explicitly so
+ * the list matches the theme on every platform.
+ */
+select option {
+  background-color: var(--bg-panel);
+  color: var(--fg);
+}
+select option:checked,
+select option:hover {
+  background-color: var(--bg-app);
+  color: var(--fg);
+}
+select option:disabled {
+  color: var(--fg-muted);
+}
+
 .pf-mono { font-family: var(--font-mono) !important; }
 .pf-row { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
 .pf-env-header {
